@@ -37,24 +37,34 @@
   FALLBACK_AI_API_KEY=...
   FALLBACK_AI_MODEL=...
   APP_TOKEN=<生成一个长随机串，明天给用户>
-  CORS_ORIGINS=https://你的vercel域名.vercel.app
-  CORS_ORIGIN_REGEX=^https://[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$
+  CORS_ORIGINS=https://你的pages域名.pages.dev
+  CORS_ORIGIN_REGEX=^https://[a-z0-9-]+\.[a-z0-9-]+\.pages\.dev$
   ```
   > Vercel 每次预览都给一个 `<branch>-<hash>.vercel.app` 子域，所以正则把 `*.vercel.app` 都放行。
 - [ ] 等部署完成 → 拿到 Railway 域名 `https://xxx.up.railway.app`
 - [ ] 浏览器访问 `https://xxx.up.railway.app/health`，看到 `{"ok":true,...}` = 后端 OK
 
-### 2. 前端部署 — Vercel
+### 2. 前端部署 — Cloudflare Pages
 
-- [ ] 登录 [vercel.com](https://vercel.com) → New Project → Import 同一仓库
-- [ ] Root Directory 设为 `oii muse/Frontend demo`，Framework 自动识别为 Vite
-- [ ] **环境变量**（Settings → Environment Variables）：
+- [ ] 登录 [dash.cloudflare.com](https://dash.cloudflare.com) → 左侧 **Workers & Pages** → **Create** → **Pages** tab → **Connect to Git**
+- [ ] 授权 GitHub → 选这个仓库
+- [ ] **Build settings**：
+  - Framework preset: `Vite`
+  - Build command: `npm run build`
+  - Build output directory: `dist`
+  - Root directory（高级设置）: `oii muse/Frontend demo`
+- [ ] **Environment variables**（Settings → Environment variables → Production）：
   ```
   VITE_API_BASE_URL=https://xxx.up.railway.app
   VITE_APP_TOKEN=<和 Railway 的 APP_TOKEN 相同>
   ```
-- [ ] Deploy → 拿到 Vercel 域名 `https://xxx.vercel.app`
-- [ ] **回到 Railway 把 `CORS_ORIGINS` 更新成实际的 Vercel 域名**（跨服务依赖，最容易漏）
+- [ ] Save and Deploy → 等 1-2 分钟 → 拿到 `https://xxx.pages.dev`
+- [ ] **回到 Railway 把 `CORS_ORIGINS` 更新成实际的 Pages 域名**（跨服务依赖，最容易漏）
+  ```
+  CORS_ORIGINS=https://xxx.pages.dev
+  CORS_ORIGIN_REGEX=^https://[a-z0-9-]+\.xxx\.pages\.dev$
+  ```
+  > Cloudflare Pages 给每个 commit 一个预览子域 `<hash>.xxx.pages.dev`，正则放行用。
 
 ### 3. 端到端测试（明天发链接前必做）
 
@@ -70,7 +80,7 @@
 
 ### 4. 给用户发链接
 
-- 链接：`https://xxx.vercel.app`
+- 链接：`https://xxx.pages.dev`
 - 提醒：建议用 Chrome / Edge / Safari 桌面版（手机能用但 UI 没专门优化）
 - **不要发 APP_TOKEN 给用户** —— token 已经编进前端 bundle，用户访问就自动带
 

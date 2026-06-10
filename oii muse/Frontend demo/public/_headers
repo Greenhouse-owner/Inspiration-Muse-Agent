@@ -1,0 +1,12 @@
+# Cloudflare Pages headers
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+# 静态资源永久缓存
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 安全头
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

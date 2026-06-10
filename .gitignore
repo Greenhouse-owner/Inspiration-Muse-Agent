@@ -61,6 +61,17 @@ Thumbs.db
 plan.md
 plan-bc.md
 
+# 仅作个人备查的旧文档（root 下散落的早期资料）
+/AGENT_PROMPT_ARCHITECTURE.md
+/NEXT_DEVELOPMENT_PLAN_AND_AGENT_FLOW.md
+/TECHNICAL_DEVELOPMENT.md
+/漏斗规则
+# 旧版 backend 残骸（已合并到 oii muse/backend）
+/backend/
+
+# 大体积本地备份（手动 tar 出来的快照目录）
+/oii muse.snapshots/
+
 # ── 其它 ────────────────────────────────────────────────────
 *.log
 logs/
