@@ -1,16 +1,36 @@
 // 后端 API 客户端 — 封装 baseURL / X-App-Token / 错误处理 / 超时
 //
-// 用 vite 的 import.meta.env：
-//   VITE_API_BASE_URL  — 后端地址。默认 '/api'，由 vite dev server 反代到 8000，
-//                        这样开发 / cloudflared 隧道 / 同站部署都只需要一条 URL。
-//                        想直连后端时可以覆盖成 'http://127.0.0.1:8000'。
-//   VITE_APP_TOKEN     — 与后端 APP_TOKEN 对应；本地开发可用 "local-dev-token"
+// API base URL 解析顺序：
+//   1. import.meta.env.VITE_API_BASE_URL（构建时注入，Vercel/Cloudflare Pages env var）
+//   2. 如果是 *.pages.dev 子域 → 自动指向生产 Railway 后端（兜底，防 env var 没生效）
+//   3. 默认 '/api'，由 vite dev server 反代到本地 backend
+//
+// VITE_APP_TOKEN：与后端 APP_TOKEN 对应；本地开发可用 "local-dev-token"
 
-const BASE_URL =
-  (import.meta as any)?.env?.VITE_API_BASE_URL?.replace(/\/+$/, '') ||
-  '/api';
+const PROD_BACKEND = 'https://inspiration-muse-agent-production.up.railway.app';
 
-const APP_TOKEN = (import.meta as any)?.env?.VITE_APP_TOKEN || 'local-dev-token';
+function resolveBaseUrl(): string {
+  const fromEnv = (import.meta as any)?.env?.VITE_API_BASE_URL?.replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+  // pages.dev 部署兜底：env var 没生效时也别打到自己（会 405）
+  if (typeof window !== 'undefined' && /\.pages\.dev$/.test(window.location.hostname)) {
+    return PROD_BACKEND;
+  }
+  return '/api';
+}
+
+const BASE_URL = resolveBaseUrl();
+
+// APP_TOKEN：构建时注入。pages.dev 兜底用生产 token，防止 env var 没生效。
+function resolveAppToken(): string {
+  const fromEnv = (import.meta as any)?.env?.VITE_APP_TOKEN;
+  if (fromEnv) return fromEnv;
+  if (typeof window !== 'undefined' && /\.pages\.dev$/.test(window.location.hostname)) {
+    return 'muse-2026-MNqRtvWxyZ';
+  }
+  return 'local-dev-token';
+}
+const APP_TOKEN = resolveAppToken();
 
 // X-Client-Id：每个浏览器独立 ID，作为后端限流的分桶 key。
 // 100 个内部用户共享同一个 APP_TOKEN，仅靠 token / IP 分桶都会让用户互相挤兑。
