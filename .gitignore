@@ -1,0 +1,67 @@
+# ============================================================
+# 灵感小精灵 / oiioii Muse — gitignore
+# 严防 secrets 泄漏 + 减小仓库体积
+# ============================================================
+
+# ── Secrets（绝对不能进 git） ─────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+backend/.env
+Frontend demo/.env
+Frontend demo/.env.local
+
+# ── Python 后端 ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Node / 前端 ──────────────────────────────────────────────
+node_modules/
+Frontend demo/node_modules/
+Frontend demo/dist/
+Frontend demo/.vite/
+.parcel-cache/
+.cache/
+*.tsbuildinfo
+
+# ── 测试 / 覆盖率 ────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── IDE / OS ─────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# ── 项目内部 ────────────────────────────────────────────────
+# 优化期间生成的快照 / plan 文件（不影响部署，不必跟仓库走）
+*.tar.gz
+*.snapshot
+.snapshots/
+plan.md
+plan-bc.md
+
+# ── 其它 ────────────────────────────────────────────────────
+*.log
+logs/
+tmp/

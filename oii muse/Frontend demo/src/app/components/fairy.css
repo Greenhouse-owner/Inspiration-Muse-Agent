@@ -1,0 +1,181 @@
+/* ─── oiioii Muse 桌宠 ─────────────────────────────────── */
+
+.muse-pet {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #121212;
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  cursor: pointer;
+  z-index: 999999;
+  animation:
+    musePetFloat   3s   ease-in-out infinite,
+    musePetBreathe 4s   ease-in-out infinite,
+    musePetPulse   2.5s ease-out   infinite;
+  transition:
+    transform    0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow   0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    width        0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    height       0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.muse-pet-eye {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #FF2D78;
+  transform: translateY(-50%);
+  animation: musePetBlink 5s ease-in-out infinite;
+  transition: background 0.2s ease, box-shadow 0.2s ease,
+              width 0.25s ease, height 0.25s ease,
+              left 0.25s ease, right 0.25s ease;
+}
+.muse-pet-eye.left  { left: 14px; }
+.muse-pet-eye.right { right: 14px; animation-delay: 0.1s; }
+
+/* ─── Core animations ──────────────────────────────────── */
+@keyframes musePetFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-7px); }
+}
+@keyframes musePetBreathe {
+  0%, 100% { box-shadow: 0 0 8px #FF2D78, 0 4px 14px rgba(0,0,0,.4); }
+  50%       { box-shadow: 0 0 18px #FF2D78, 0 4px 14px rgba(0,0,0,.4); }
+}
+@keyframes musePetPulse {
+  0%   { box-shadow: 0 0 8px #FF2D78, 0 0 0 0   rgba(255,45,120,.45); }
+  70%  { box-shadow: 0 0 8px #FF2D78, 0 0 0 12px rgba(255,45,120,0); }
+  100% { box-shadow: 0 0 8px #FF2D78, 0 0 0 0   rgba(255,45,120,0); }
+}
+@keyframes musePetBlink {
+  0%, 92%, 100% { transform: translateY(-50%) scaleY(1); }
+  96%            { transform: translateY(-50%) scaleY(0.08); }
+}
+@keyframes musePetSpin {
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+@keyframes musePetSpinFull {
+  to { transform: rotate(360deg); }
+}
+@keyframes musePetShake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+@keyframes musePetSuccessGlow {
+  0%, 100% { box-shadow: 0 0 10px #4CAF50, 0 0 20px rgba(76,175,80,.3); }
+  50%       { box-shadow: 0 0 20px #4CAF50, 0 0 36px rgba(76,175,80,.5); }
+}
+@keyframes musePetErrorGlow {
+  0%, 100% { box-shadow: 0 0 10px #F44336, 0 0 20px rgba(244,67,54,.3); }
+  50%       { box-shadow: 0 0 20px #F44336, 0 0 36px rgba(244,67,54,.5); }
+}
+
+/* ─── Hover / active ───────────────────────────────────── */
+.muse-pet:hover {
+  transform: scale(1.15) translateY(-4px);
+  box-shadow: 0 0 24px #FF2D78, 0 0 40px rgba(255,45,120,.5);
+}
+.muse-pet:hover .muse-pet-eye {
+  background: #FF80AB;
+  box-shadow: 0 0 7px #FF2D78;
+}
+.muse-pet:active { transform: scale(0.88); }
+
+/* ─── Flash particle ───────────────────────────────────── */
+.muse-pet-flash {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(.4);
+  width: 120%; height: 120%;
+  border-radius: 50%;
+  background: rgba(255,45,120,.35);
+  pointer-events: none;
+  animation: musePetFlash .35s ease-out forwards;
+}
+@keyframes musePetFlash {
+  0%   { transform: translate(-50%,-50%) scale(.4); opacity: 1; }
+  100% { transform: translate(-50%,-50%) scale(2.2); opacity: 0; }
+}
+
+/* ─── Star particles ───────────────────────────────────── */
+.muse-pet-star {
+  position: absolute;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #FF2D78;
+  pointer-events: none;
+  animation: musePetStarFloat .7s ease-out forwards;
+}
+@keyframes musePetStarFloat {
+  0%   { opacity: 1; transform: translate(0,0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx),var(--ty)) scale(0); }
+}
+
+/* ─── State variants ───────────────────────────────────── */
+.muse-pet.expanded { width: 68px; height: 68px; }
+.muse-pet.expanded .muse-pet-eye        { width: 6px; height: 6px; }
+.muse-pet.expanded .muse-pet-eye.left   { left: 18px; }
+.muse-pet.expanded .muse-pet-eye.right  { right: 18px; }
+
+.muse-pet.thinking .muse-pet-eye {
+  background: transparent;
+  border: 2px solid #FF2D78;
+  border-top-color: transparent;
+  animation: musePetSpin .9s linear infinite;
+}
+.muse-pet.loading {
+  background: transparent;
+  border: 3px solid rgba(255,45,120,.2);
+  border-top-color: #FF2D78;
+  animation: musePetSpinFull 1s linear infinite !important;
+}
+.muse-pet.loading .muse-pet-eye { display: none; }
+.muse-pet.success {
+  animation: musePetFloat 3s ease-in-out infinite, musePetSuccessGlow 2s ease-in-out infinite;
+}
+.muse-pet.error {
+  animation: musePetShake .5s ease-in-out, musePetErrorGlow 2s ease-in-out infinite .5s;
+}
+
+/* ─── Panel animations ─────────────────────────────────── */
+@keyframes musePanelIn {
+  from { opacity: 0; transform: translateY(14px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes musePanelOut {
+  from { opacity: 1; transform: translateY(0)    scale(1); }
+  to   { opacity: 0; transform: translateY(14px) scale(.96); }
+}
+.muse-panel-enter { animation: musePanelIn  .22s cubic-bezier(.4,0,.2,1) forwards; }
+.muse-panel-exit  { animation: musePanelOut .18s cubic-bezier(.4,0,.2,1) forwards; }
+
+/* ─── Message bubble entrance ──────────────────────────── */
+@keyframes museMsgIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.muse-msg { animation: museMsgIn .2s ease-out forwards; }
+
+/* ─── Tag entrance ─────────────────────────────────────── */
+@keyframes museTagIn {
+  from { opacity: 0; transform: scale(.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.muse-tag-in { animation: museTagIn .18s ease-out forwards; }
+
+/* ─── Typing dots ──────────────────────────────────────── */
+@keyframes museTypingDot {
+  0%, 80%, 100% { transform: translateY(0); opacity: .4; }
+  40%            { transform: translateY(-5px); opacity: 1; }
+}
+.muse-dot-1 { animation: museTypingDot 1.1s ease-in-out infinite 0s; }
+.muse-dot-2 { animation: museTypingDot 1.1s ease-in-out infinite .18s; }
+.muse-dot-3 { animation: museTypingDot 1.1s ease-in-out infinite .36s; }

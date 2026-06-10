@@ -1,0 +1,20 @@
+[project]
+name = "inspiration-fairy-backend"
+version = "0.1.0"
+description = "灵感小精灵插件后端 - AI 代理服务"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.136.0",
+    "uvicorn>=0.48.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.13.0",
+    "pydantic-settings>=2.14.0",
+    "python-dotenv>=1.2.0",
+]
+
+[project.scripts]
+dev = "uvicorn app.main:app --reload --port 8000"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
