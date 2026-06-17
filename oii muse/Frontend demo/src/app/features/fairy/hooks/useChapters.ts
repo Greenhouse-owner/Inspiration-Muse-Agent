@@ -33,6 +33,8 @@ export function useChapters(args: {
 
   const [chapters, setChapters] = useState<StoryChapter[]>([]);
   const [chapterBusy, setChapterBusy] = useState(false);
+  // 章节降级状态：最新一次生成 / 插入是否走了 mock。给"最新章节卡"的顶部 hint 用。
+  const [chaptersDegraded, setChaptersDegraded] = useState(false);
 
   // 镜像 ref：useGeneration 的 refineSmart 分支需要实时读 chapters
   const chaptersRef = useRef<StoryChapter[]>([]);
@@ -59,15 +61,20 @@ export function useChapters(args: {
     setChapterBusy(true);
     setMuseState('thinking');
     try {
-      const result = await generateStoryChapters(
+      const res = await generateStoryChapters(
         { story: cur.story.content, chapterCount: count },
         ctrl.signal,
       );
       const now = new Date().toISOString();
-      setChapters(result);
+      setChapters(res.chapters);
+      // 用最新一次生成的"是否降级"覆盖整段章节状态——后续删除/插入若再次拿到 AI 输出，
+      // 会在那一次的章节消息里更新。
+      setChaptersDegraded(!!res.degraded);
       appendMessage({
         id: mid(), role: 'muse', resultType: 'chapters',
-        chapters: result, content: '', createdAt: now,
+        chapters: res.chapters, content: '',
+        chaptersDegraded: !!res.degraded,
+        createdAt: now,
       });
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
@@ -111,7 +118,7 @@ export function useChapters(args: {
     setChapterBusy(true);
     setMuseState('thinking');
     try {
-      const inserted = await insertStoryChapter(
+      const res = await insertStoryChapter(
         {
           story: cur.story.content,
           chapters,
@@ -119,6 +126,7 @@ export function useChapters(args: {
         },
         ctrl.signal,
       );
+      const inserted = res.chapter;
       // 插入到 afterIndex 之后并重排序号
       const next: StoryChapter[] = [];
       let pushed = false;
@@ -136,9 +144,15 @@ export function useChapters(args: {
       }
       const renumbered = next.map((c, i) => ({ ...c, index: i + 1 }));
       setChapters(renumbered);
+      // 任何一次插入降级都会让整段章节状态显示为降级。
+      // 若 AI 恢复，下次成功的插入或重新生成会清除 flag。
+      const degraded = !!res.degraded;
+      if (degraded) setChaptersDegraded(true);
       appendMessage({
         id: mid(), role: 'muse', resultType: 'chapters',
-        chapters: renumbered, content: '', createdAt: new Date().toISOString(),
+        chapters: renumbered, content: '',
+        chaptersDegraded: chaptersDegraded || degraded,
+        createdAt: new Date().toISOString(),
       });
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
@@ -158,10 +172,11 @@ export function useChapters(args: {
   // 切路径 / 重新生成时调用
   const resetChapters = useCallback(() => {
     setChapters([]);
+    setChaptersDegraded(false);
   }, []);
 
   return {
-    chapters, chapterBusy,
+    chapters, chapterBusy, chaptersDegraded,
     chaptersRef,            // 给 useGeneration 用
     setChapters,            // 给 useGeneration 的 refineSmart 分支用
     generateChapters,

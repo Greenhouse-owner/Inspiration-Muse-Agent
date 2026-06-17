@@ -35,6 +35,7 @@ import { WorldviewCard } from "../features/fairy/components/WorldviewCard";
 import { StageHint } from "../features/fairy/components/StageHint";
 import { ChapterListCard } from "../features/fairy/components/ChapterListCard";
 import { TabbedHead } from "../features/fairy/components/TabbedHead";
+import { CopyButton } from "../features/fairy/components/CopyButton";
 import { useTagCloud } from "../features/fairy/hooks/useTagCloud";
 import { useAiCachePrefetch } from "../features/fairy/hooks/useAiCachePrefetch";
 import { useChapters } from "../features/fairy/hooks/useChapters";
@@ -114,7 +115,7 @@ export function Fairy() {
     spawnStars,
   });
   const {
-    chapters, chapterBusy,
+    chapters, chapterBusy, chaptersDegraded,
     setChapters: setChaptersFromHook,
     generateChapters,
     handleDeleteChapter, handleInsertChapterAfter,
@@ -465,6 +466,11 @@ export function Fairy() {
                         onDelete={handleDeleteChapter}
                         onInsertAfter={handleInsertChapterAfter}
                         busy={chapterBusy || msg.id !== lastChaptersMsgId}
+                        degraded={
+                          msg.id === lastChaptersMsgId
+                            ? chaptersDegraded
+                            : !!msg.chaptersDegraded
+                        }
                       />
                     </div>
                   ) : msg.resultType === 'hint' ? (
@@ -487,6 +493,8 @@ export function Fairy() {
                       whiteSpace: 'pre-wrap',
                     }}>
                       {msg.content}
+                      {/* 仅 muse 输出的实质内容（story 文本）显示复制；hint 已走前面分支不会到这里 */}
+                      <CopyButton getText={() => msg.content} />
                     </div>
                   )}
                 </div>

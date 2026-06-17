@@ -23,6 +23,8 @@ class StoryChaptersRequest(BaseModel):
 
 class StoryChaptersResponse(BaseModel):
     chapters: list[StoryChapterDTO]
+    degraded: bool = False
+    degradeReason: str | None = None
 
 
 class InsertStoryChapterRequest(BaseModel):
@@ -34,6 +36,8 @@ class InsertStoryChapterRequest(BaseModel):
 
 class InsertStoryChapterResponse(BaseModel):
     chapter: StoryChapterDTO
+    degraded: bool = False
+    degradeReason: str | None = None
 
 
 class StoryResult(BaseModel):

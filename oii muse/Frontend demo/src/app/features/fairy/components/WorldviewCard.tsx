@@ -4,8 +4,18 @@
 import { theme as C } from '../../../theme';
 import { T } from '../../../i18n/zh';
 import type { WorldviewResult } from '../../../types';
+import { CopyButton } from './CopyButton';
 
 export function WorldviewCard({ r }: { r: WorldviewResult }) {
+  const buildCopyText = () => {
+    const lines: string[] = [T.cards.worldview.title];
+    for (const [label, key] of T.cards.worldview.rows) {
+      lines.push(`${label}：${r[key as Exclude<keyof WorldviewResult, 'conflictHooks'>]}`);
+    }
+    lines.push(`${T.cards.worldview.conflictHooksLabel}：`);
+    for (const h of r.conflictHooks) lines.push(`- ${h}`);
+    return lines.join('\n');
+  };
   return (
     <div style={{
       background: 'rgba(76,175,80,.05)', border: `1px solid rgba(76,175,80,.2)`,
@@ -35,6 +45,7 @@ export function WorldviewCard({ r }: { r: WorldviewResult }) {
           </div>
         ))}
       </div>
+      <CopyButton getText={buildCopyText} />
     </div>
   );
 }

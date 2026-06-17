@@ -18,5 +18,7 @@ export interface ChatMessage {
   characterResult?: CharacterResult;
   worldviewResult?: WorldviewResult;
   chapters?: StoryChapter[];
+  // 章节生成或插入时后端走 mock，前端在卡顶显示"AI 暂时离线"小字提示
+  chaptersDegraded?: boolean;
   createdAt: string;
 }

@@ -298,12 +298,9 @@ def _split_story_for_mock(story: str, n: int) -> list[str]:
 
 
 def _mock_chapter_title(text: str, idx: int) -> str:
-    """从段落首句提取 2-10 个汉字作为章节名。"""
-    head = re.split(r"[。！？!?\.\n]", text, maxsplit=1)[0].strip()
-    if not head:
-        return f"第{idx}章"
-    # 截到 10 字
-    return head[:10] if len(head) > 10 else head
+    """Mock 模式不再用故事原文截断——容易出现"最后的对峙在一间无人"这种半句。
+    直接返回"第 N 章"，配合 degraded 标记让用户知道这是降级输出。"""
+    return f"第{idx}章"
 
 
 def _mock_story_chapters(story: str, n: int) -> list[StoryChapterDTO]:
@@ -314,7 +311,9 @@ def _mock_story_chapters(story: str, n: int) -> list[StoryChapterDTO]:
             StoryChapterDTO(
                 index=i + 1,
                 title=_mock_chapter_title(chunk, i + 1),
-                summary=f"{chunk}{_OFFLINE_NOTE}",
+                # 不再把 _OFFLINE_NOTE 贴在 summary 末尾——那是噪音。
+                # 降级状态由 response 的 degraded 字段表达，前端统一在章节卡顶部显示一行提示。
+                summary=chunk,
             )
         )
     return out
@@ -347,8 +346,30 @@ async def generate_story_chapters(
         chapter_count=req.chapterCount,
         story=req.story,
     )
+    # 自动重试 1 次：itlsj 网关偶发 502/timeout，第二次往往就过了。
+    # 重试只对真·瞬时错误有意义，所以仅捕获 AIError，不捕获 ValueError(JSON 错乱属于"AI 输出问题"，重试也大概率还是错)。
+    last_err: Exception | None = None
+    raw: str | None = None
+    for attempt in range(2):
+        try:
+            raw = await call_ai(client, STORY_CHAPTERS_SYSTEM, user_prompt, temperature=0.7)
+            break
+        except AIError as e:
+            last_err = e
+            if attempt == 0:
+                log.warning("generate_story_chapters: AI attempt 1 failed (%s), retrying once", e)
+
+    if raw is None:
+        log.warning(
+            "generate_story_chapters: AI failed after retry (%s); falling back to mock", last_err,
+        )
+        return StoryChaptersResponse(
+            chapters=_mock_story_chapters(req.story, req.chapterCount),
+            degraded=True,
+            degradeReason="ai_unavailable",
+        )
+
     try:
-        raw = await call_ai(client, STORY_CHAPTERS_SYSTEM, user_prompt, temperature=0.7)
         try:
             data = extract_json(raw)
         except ValueError as e:
@@ -372,10 +393,12 @@ async def generate_story_chapters(
         return StoryChaptersResponse(chapters=chapters[: req.chapterCount])
     except (AIError, ValueError) as e:
         log.warning(
-            "generate_story_chapters: AI failed (%s); falling back to mock", e,
+            "generate_story_chapters: AI parse failed (%s); falling back to mock", e,
         )
         return StoryChaptersResponse(
             chapters=_mock_story_chapters(req.story, req.chapterCount),
+            degraded=True,
+            degradeReason="ai_unavailable",
         )
 
 
@@ -389,7 +412,7 @@ def _renumber(chapters: list[StoryChapterDTO]) -> list[StoryChapterDTO]:
 def _mock_inserted_chapter(
     story: str, chapters: list[StoryChapterDTO], insert_after: int,
 ) -> StoryChapterDTO:
-    # 用前后章节摘要片段拼一段过渡。
+    # 用前后章节摘要片段拼一段过渡。降级提示由 response.degraded 表达，不再贴在 summary 末尾。
     prev = chapters[insert_after - 1] if insert_after > 0 else None
     nxt = chapters[insert_after] if insert_after < len(chapters) else None
     bits: list[str] = []
@@ -398,7 +421,7 @@ def _mock_inserted_chapter(
     if nxt:
         bits.append(f"为「{nxt.title}」做铺垫")
     bridge = "，".join(bits) if bits else "在故事中段补充一段过渡"
-    summary = f"在主线推进中，{bridge}。{_OFFLINE_NOTE}"
+    summary = f"在主线推进中，{bridge}。"
     return StoryChapterDTO(
         index=0,
         title="过渡章",
@@ -424,8 +447,31 @@ async def insert_story_chapter(
         insert_after_index=req.insertAfterIndex,
         hint_block=hint_block,
     )
+    # 自动重试 1 次，处理 itlsj 偶发 502
+    last_err: Exception | None = None
+    raw: str | None = None
+    for attempt in range(2):
+        try:
+            raw = await call_ai(client, CHAPTER_INSERT_SYSTEM, user_prompt, temperature=0.75)
+            break
+        except AIError as e:
+            last_err = e
+            if attempt == 0:
+                log.warning("insert_story_chapter: AI attempt 1 failed (%s), retrying once", e)
+
+    if raw is None:
+        log.warning(
+            "insert_story_chapter: AI failed after retry (%s); falling back to mock", last_err,
+        )
+        return InsertStoryChapterResponse(
+            chapter=_mock_inserted_chapter(
+                req.story, req.chapters, req.insertAfterIndex,
+            ),
+            degraded=True,
+            degradeReason="ai_unavailable",
+        )
+
     try:
-        raw = await call_ai(client, CHAPTER_INSERT_SYSTEM, user_prompt, temperature=0.75)
         try:
             data = extract_json(raw)
         except ValueError as e:
@@ -444,12 +490,14 @@ async def insert_story_chapter(
         )
     except (AIError, ValueError) as e:
         log.warning(
-            "insert_story_chapter: AI failed (%s); falling back to mock", e,
+            "insert_story_chapter: AI parse failed (%s); falling back to mock", e,
         )
         return InsertStoryChapterResponse(
             chapter=_mock_inserted_chapter(
                 req.story, req.chapters, req.insertAfterIndex,
-            )
+            ),
+            degraded=True,
+            degradeReason="ai_unavailable",
         )
 
 

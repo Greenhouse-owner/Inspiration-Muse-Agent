@@ -121,6 +121,8 @@ export interface StoryChaptersRequest {
 
 export interface StoryChaptersResponse {
   chapters: StoryChapter[];
+  degraded?: boolean;
+  degradeReason?: string;
 }
 
 export interface InsertStoryChapterRequest {
@@ -132,6 +134,8 @@ export interface InsertStoryChapterRequest {
 
 export interface InsertStoryChapterResponse {
   chapter: StoryChapter;
+  degraded?: boolean;
+  degradeReason?: string;
 }
 
 // ─── Smart refine（故事 + 章节）────────────────────────────────────────────

@@ -35,6 +35,9 @@ export const T = {
 
     tagTitleAi: 'AI 根据已选词生成',
     tagTitleLocal: '本地词库',
+
+    copy: 'copy',
+    copyDone: 'copied ✓',
   },
 
   // ─── 章节卡 ───────────────────────────────────────────────────

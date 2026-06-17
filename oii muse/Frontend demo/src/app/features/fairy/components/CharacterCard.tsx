@@ -4,11 +4,14 @@
 import { theme as C } from '../../../theme';
 import { T } from '../../../i18n/zh';
 import type { CharacterResult } from '../../../types';
+import { CopyButton } from './CopyButton';
 
 export function CharacterCard({ r }: { r: CharacterResult }) {
   const rows: [string, string][] = T.cards.character.rows.map(
     ([label, key]) => [label, r[key as keyof CharacterResult]] as [string, string]
   );
+  const buildCopyText = () =>
+    [T.cards.character.title, ...rows.map(([label, val]) => `${label}：${val}`)].join('\n');
   return (
     <div style={{
       background: 'rgba(255,45,120,.06)', border: `1px solid rgba(255,45,120,.2)`,
@@ -23,6 +26,7 @@ export function CharacterCard({ r }: { r: CharacterResult }) {
           <span style={{ color: '#E8E8E8', fontSize: 12, lineHeight: 1.55 }}>{val}</span>
         </div>
       ))}
+      <CopyButton getText={buildCopyText} />
     </div>
   );
 }

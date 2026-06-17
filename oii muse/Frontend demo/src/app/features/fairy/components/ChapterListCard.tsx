@@ -5,16 +5,20 @@ import type React from 'react';
 import { theme as C } from '../../../theme';
 import { T } from '../../../i18n/zh';
 import type { StoryChapter } from '../../../types';
+import { CopyButton } from './CopyButton';
 
 export function ChapterListCard({
-  chapters, onDelete, onInsertAfter, busy,
+  chapters, onDelete, onInsertAfter, busy, degraded = false,
 }: {
   chapters: StoryChapter[];
   onDelete: (index: number) => void;
   onInsertAfter: (afterIndex: number) => void;
   busy: boolean;
+  degraded?: boolean;
 }) {
   if (chapters.length === 0) return null;
+  const buildCopyText = () =>
+    chapters.map(c => `${T.chapters.chapterHeading(c.index, c.title)}\n${c.summary}`).join('\n\n');
   const btnStyle: React.CSSProperties = {
     background: 'transparent',
     border: '1px solid rgba(255,45,120,.32)',
@@ -43,8 +47,17 @@ export function ChapterListCard({
       <div style={{
         color: C.primary, fontSize: 11, fontWeight: 700,
         marginBottom: 10, letterSpacing: '.06em',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
       }}>
-        {T.chapters.title(chapters.length)}
+        <span>{T.chapters.title(chapters.length)}</span>
+        {degraded && (
+          <span style={{
+            color: '#FF9500', fontSize: 10, fontWeight: 600,
+            opacity: 0.9, letterSpacing: 0,
+          }}>
+            · {T.errors.aiOfflineHint}
+          </span>
+        )}
       </div>
 
       {/* 顶端插入 */}
@@ -101,6 +114,7 @@ export function ChapterListCard({
           </button>
         </div>
       ))}
+      <CopyButton getText={buildCopyText} />
     </div>
   );
 }
