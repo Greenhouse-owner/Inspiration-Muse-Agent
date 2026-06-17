@@ -21,16 +21,17 @@ class Settings(BaseSettings):
     # ── Rate limit ─────────────────────────────────────────────────────────
     # 内部 100 人内测：限额只作为"极限拦截"——挡 token 泄漏后的恶意脚本，
     # 友好用户完全感知不到。expensive 1000/人/天 = 一个人手动玩 1 小时也用不完。
-    # 全局熔断 600/分钟 也只在被批量攻击时触发。
+    # 全局熔断 1200/分钟 在被批量攻击时触发；100 人正常使用峰值约 350/min。
     rate_limit_expensive_per_minute: int = 30
     rate_limit_expensive_per_day: int = 1000
     rate_limit_cheap_per_minute: int = 120
     rate_limit_cheap_per_day: int = 10000
-    rate_limit_global_per_minute: int = 600
+    rate_limit_global_per_minute: int = 1200
 
     # 后端到 AI 网关的并发上限（同时进行的 AI 调用数）。超过的请求排队。
     # 注意：这不是限速，是保护下游网关不被 100 人同时挤兑全 503。
-    ai_concurrency_limit: int = 12
+    # 20 路在 100 人场景下：最坏排队等待 ~40s（generate 超时是 60s，安全）。
+    ai_concurrency_limit: int = 20
 
     # 兼容旧字段（已不再使用，保留是为了让旧 .env 不报错）
     rate_limit_per_minute: int = 10
