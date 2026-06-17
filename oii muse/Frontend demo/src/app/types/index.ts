@@ -69,6 +69,8 @@ export interface DynamicCloudResponse {
   stage: FunnelStage;
   analysis: DynamicTagAnalysis;
   tags: Tag[];
+  degraded?: boolean;
+  degradeReason?: string;
 }
 
 export interface GenerateRequest {

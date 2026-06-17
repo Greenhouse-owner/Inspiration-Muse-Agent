@@ -98,7 +98,7 @@ export function Fairy() {
     latestBatchRef, latestExcludeRef, latestTagStateKeyRef,
     onAnalysis: setAnalysis,
   });
-  const { aiTagCache, consumeFromCache, removeFromCache, invalidateCache } = aiCache;
+  const { aiTagCache, consumeFromCache, removeFromCache, invalidateCache, isDegraded } = aiCache;
 
   // ── 章节状态（C5 抽出到 useChapters）──────────────────────────────
   // 因为 useChapters 需要 getCurrentResult，而 currentResult 在 useGeneration 里，
@@ -347,7 +347,7 @@ export function Fairy() {
               disabled={isThinking}
               width={352 - 24}
             >
-              <StageHint stage={stage} analysis={analysis} />
+              <StageHint stage={stage} analysis={analysis} isDegraded={isDegraded} />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {batch.map((tag, i) => {
                   const sel = selectedTags.some(t => t.text === tag.text);

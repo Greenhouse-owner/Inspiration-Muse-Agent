@@ -45,21 +45,22 @@ export const T = {
     chapterHeading: (n: number, title: string) => `第 ${n} 章 · ${title}`,
     btnDelete: '删除',
     ariaDelete: (n: number) => `删除第 ${n} 章`,
-    afterStoryHint: '想分章节？直接输入数字 1-20（例如 "3"），或继续输入修改需求。',
+    afterStoryHint: '可继续输入修改需求，或想分章节？直接输入分1-10章节（例如 "分3章"）',
   },
 
   // ─── 错误 / 兜底 ──────────────────────────────────────────────
   errors: {
-    onlyOnStoryPath: '（只能在故事结果上拆章节，先切换到故事路径并生成一段故事）',
-    chapterGenFailed: '（后端暂不可达，章节生成失败，请稍后再试）',
-    chapterInsertFailed: '（后端暂不可达，无法插入新章节）',
-    chapterMaxReached: '（章节已达上限 20 章，无法再插入；删一章再试）',
-    refineNoChange: '（这次没有改动任何内容，再描述得具体一些试试）',
-    refineFailedSmart: '（后端暂不可达，无法继续修改）',
-    refineFailedLegacy: '（后端暂不可达，无法继续修改，请稍后再试）',
-    generateOffline: '（后端暂不可达，已用本地兜底生成）',
+    onlyOnStoryPath: '（Muse拆章节需要先有故事——切到「故事梗概」路径，生成一段再来）',
+    chapterGenFailed: '（章节生成失败了，Muse网络可能波动，等几秒再试一次）',
+    chapterInsertFailed: '（插入章节没成功，Muse服务暂时忙不过来，稍后再点）',
+    chapterMaxReached: '（Muse已经 20 章了，先删掉不需要的章节再插入新的）',
+    refineNoChange: '（Muse没听懂要改哪里，试试说得更具体：比如「把结局改成开放式」）',
+    refineFailedSmart: '（修改请求没送出去，Muse网络不太稳，过一会儿再试）',
+    refineFailedLegacy: '（修改失败了，可能是Muse服务暂时过载，等半分钟再发一次）',
+    generateOffline: '（AI 暂时连不上，先用本地Muse模板垫一版，联网后可以重新生成）',
     invalidChapterCount: (min: number, max: number) => `章节数请填 ${min}-${max}`,
     intentInvalidWrap: (reason: string) => `（${reason}）`,
+    aiOfflineHint: 'AI 暂时离线，词卡为本地生成',
   },
 
   // ─── 路径 / 阶段 / 缺口 ────────────────────────────────────────
@@ -137,12 +138,12 @@ export const T = {
   // ─── 产品介绍页 ───────────────────────────────────────────────
   landing: {
     brand: 'oiioii Muse',
-    brandSub: '选词拼接灵感，故事逐步成形',
+    brandSub: '不需要写任何东西，只需要点几个词',
     badgeBeta: 'MVP Beta',
     badgeProductTag: '动态灵感拼图生成器',
 
-    heroTitle: '不需要写任何东西',
-    heroTitleHl: '只需要选几个词',
+    heroTitle: '点词拼接灵感',
+    heroTitleHl: '世界逐步成形',
     heroDesc: 'oiioii Muse 是一个动态灵感拼图生成器。选择创作目标（故事 / 角色 / 世界观），从词卡中持续选择——Muse 每次刷新都会读取已选词、分析当前缺口、生成下一批动态词卡，让故事、角色或世界观逐步成形。',
     heroChips: [
       { icon: '📖', text: '3 条创作路径' },

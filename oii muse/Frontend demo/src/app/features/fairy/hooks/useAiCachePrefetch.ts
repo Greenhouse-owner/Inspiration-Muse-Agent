@@ -53,12 +53,17 @@ export function useAiCachePrefetch(args: {
   // ─── state ───────────────────────────────────────────────────────
   const [aiTagCache, setAiTagCache] = useState<Tag[]>([]);
   const [isPrefetching, setIsPrefetching] = useState(false);
+  // 后端返回 degraded=true 时打开。下一次成功响应会关上。
+  // 单独 state 而非 ref：UI 要根据它显示降级提示。
+  const [isDegraded, setIsDegraded] = useState(false);
 
   // ─── refs ───────────────────────────────────────────────────────
   const aiTagCacheRef        = useRef<Tag[]>([]);
   const isPrefetchingRef     = useRef(false);
   const lastPrefetchKeyRef   = useRef<string>('');
   const prefetchAbortRef     = useRef<AbortController | null>(null);
+  // 标记已为当前 degraded 响应安排过 5s 静默重试，避免反复排重试
+  const degradedRetryScheduledRef = useRef(false);
 
   // ⚠️ 不变量 1, 2：每次 render 顶层同步 ref
   // 这是为了 effect 内部读到最新值（避免闭包陈旧）。
@@ -109,6 +114,22 @@ export function useAiCachePrefetch(args: {
         if (ctrl.signal.aborted) return;
         // 不变量 5: stateKey 已变（用户已切到别的上下文），丢弃响应
         if (res.path !== requestPath || key !== latestTagStateKeyRef.current) return;
+
+        // 后端 degraded → 打开提示 + 5s 后清节流让 effect 静默重试一次
+        if (res.degraded) {
+          setIsDegraded(true);
+          if (!degradedRetryScheduledRef.current) {
+            degradedRetryScheduledRef.current = true;
+            setTimeout(() => {
+              lastPrefetchKeyRef.current = '';
+              degradedRetryScheduledRef.current = false;
+            }, 5000);
+          }
+        } else {
+          setIsDegraded(false);
+          degradedRetryScheduledRef.current = false;
+        }
+
         if (res.tags && res.tags.length > 0) {
           setAiTagCache(prev => {
             const have = new Set(prev.map(t => t.text));
@@ -164,5 +185,6 @@ export function useAiCachePrefetch(args: {
     consumeFromCache,
     removeFromCache,
     invalidateCache,
+    isDegraded,
   };
 }

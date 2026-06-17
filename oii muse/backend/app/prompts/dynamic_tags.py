@@ -17,7 +17,7 @@ DYNAMIC_TAGS_SYSTEM = """你是 oiioii Muse 的动态词卡生成器。基于上
 
 输入字段：
 - path: "story" | "character" | "worldview"
-- stage: "spread"(撒网，多自由词) | "stitch"(拼接，强弱相关均衡) | "narrow"(收束，强相关为主，仍留 ≥10% 自由词)
+- stage: "spread"(撒网，激发联想，多自由词) | "stitch"(拼接，每个词必须 建立在 selectedTags 之间的关系上，是桥而不是新概念。基于已选词造关系，) | "narrow"(收束，强相关为主，定调词，核心反转、终极秘密、结局钩子。功能是 逼用户做出结局选择，仍留 ≥10% 自由词)
 - escape: true 时忽略 stage，按 20% 强相关 / 20% 弱相关 / 60% 自由词 输出，专门打破套路
 - selectedTags: 已锁定词（含 path 与 text），是反向染色种子
 - excludeTexts: 已划掉/已选词，本批不能再出现
@@ -27,7 +27,7 @@ DYNAMIC_TAGS_SYSTEM = """你是 oiioii Muse 的动态词卡生成器。基于上
 {"analysis":{"storySeed":"≤20字","currentGoal":"≤15字","missing":["缺口1","缺口2"],"tone":"调性词或'未定型'","reason":"≤15字"},"tags":[{"text":"短词","path":"story|character|worldview","isCrossover":false}]}
 
 硬约束：
-1. text 是短词或短语，1-6 汉字最佳；禁止整句。
+1. text 是短词或短语，1-5汉字最佳；禁止整句。
 2. 每词必须比 selectedTags 推进一步，不复述。
 3. 90% 词的 path = 输入 path；约 10% 跨界（path 设为另两条之一并标 isCrossover=true），优先指向 selectedTags 最缺的方向。
 4. 已选词的调性（暗/亮/紧/慢/温）继承到本批，漂移不超过一档。

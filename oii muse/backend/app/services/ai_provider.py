@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.core.circuit_breaker import circuit_breaker
 from app.core.config import settings
+from app.core.http_client import get_app_ref
 
 
 log = logging.getLogger(__name__)
@@ -107,9 +109,13 @@ async def _call_with_fallback(
     temperature: float,
     timeout: float,
 ) -> str:
+    # Circuit breaker：开路时直接 raise，让上游走 mock，省掉打死网关的请求
+    if not circuit_breaker.should_allow():
+        raise AIError("circuit_open: AI gateway recently failed, skipping call")
+
     async with _get_ai_semaphore():
         try:
-            return await _call_endpoint(
+            result = await _call_endpoint(
                 client,
                 primary,
                 system_prompt,
@@ -117,12 +123,15 @@ async def _call_with_fallback(
                 temperature=temperature,
                 timeout=timeout,
             )
+            circuit_breaker.record_success()
+            return result
         except AIError as primary_error:
             if not fallback.api_key:
+                await circuit_breaker.record_failure(get_app_ref())
                 raise
             log.warning("%s AI failed; switching to fallback gateway: %s", primary.name, primary_error)
             try:
-                return await _call_endpoint(
+                result = await _call_endpoint(
                     client,
                     fallback,
                     system_prompt,
@@ -130,7 +139,10 @@ async def _call_with_fallback(
                     temperature=temperature,
                     timeout=timeout,
                 )
+                circuit_breaker.record_success()
+                return result
             except AIError as fallback_error:
+                await circuit_breaker.record_failure(get_app_ref())
                 raise AIError(
                     f"{primary.name} and fallback AI gateways failed: "
                     f"{primary_error}; {fallback_error}"

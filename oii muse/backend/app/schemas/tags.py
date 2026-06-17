@@ -30,3 +30,5 @@ class DynamicCloudResponse(BaseModel):
     stage: FunnelStage
     analysis: DynamicTagAnalysis
     tags: list[TagDTO]
+    degraded: bool = False
+    degradeReason: str | None = None

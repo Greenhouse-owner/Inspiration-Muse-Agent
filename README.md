@@ -1,11 +1,13 @@
 # Inspiration-Muse-Agent
 A very interesting way to complete the creation by clicking on cards
+
 # Inspiration Muse Agent · 灵感缪斯代理人
 
 > **不需要写任何东西，只需要选几个词。**
 >
 > 一个动态灵感拼图生成器：通过点击词卡积累灵感，AI 把这些词组织成完整的故事梗概、角色设定或世界观。
 
+🌐 **线上体验**：https://inspiration-muse-agent.pages.dev
 
 ---
 

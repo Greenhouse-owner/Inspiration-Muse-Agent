@@ -199,7 +199,12 @@ def _mock_batch(
     ]
 
 
-def _mock_response(req: DynamicCloudRequest) -> DynamicCloudResponse:
+def _mock_response(
+    req: DynamicCloudRequest,
+    *,
+    degraded: bool = False,
+    reason: str | None = None,
+) -> DynamicCloudResponse:
     selected_texts = [t.text for t in req.selectedTags]
     exclude = set(req.excludeTexts) | set(selected_texts)
     return DynamicCloudResponse(
@@ -208,6 +213,8 @@ def _mock_response(req: DynamicCloudRequest) -> DynamicCloudResponse:
         stage=req.stage,
         analysis=_mock_analysis(req.path, req.stage, selected_texts),
         tags=_mock_batch(req.path, req.stage, exclude, req.count, req.escape),
+        degraded=degraded,
+        degradeReason=reason,
     )
 
 
@@ -319,4 +326,5 @@ async def dynamic_cloud(
         return _parse_ai_response(raw, req)
     except (AIError, ValueError) as e:
         log.warning("dynamic_cloud: AI failed (%s); falling back to mock", e)
-        return _mock_response(req)
+        # 标记 degraded 让前端能感知并显示提示 + 5s 后静默重试
+        return _mock_response(req, degraded=True, reason="ai_unavailable")
