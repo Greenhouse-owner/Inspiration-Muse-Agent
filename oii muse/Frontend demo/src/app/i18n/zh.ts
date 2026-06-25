@@ -25,7 +25,9 @@ export const T = {
     btnPlus: '+',
     btnEscape: '跳出去',
     btnRefresh: '换一批',
+    btnSummon: '召唤精灵',
     titleEscape: '临时提高自由词比例，打破当前套路',
+    titleSummon: '让 AI 拍一屏全新词卡（约 1-3 秒）',
 
     inputPlaceholderThinking: '正在生成…',
     inputPlaceholderRefineWithChapters: '输入修改需求，或换个数字重生章节…',
@@ -38,6 +40,14 @@ export const T = {
 
     copy: 'copy',
     copyDone: 'copied ✓',
+  },
+
+  // ─── 调味词卡 v1.2 ───────────────────────────────────────────
+  swap: {
+    refresh: '换一批',
+    refreshing: '调味中…',
+    notAvailable: '（v1 暂只支持故事路径的调味，请用文字告诉 Muse 想改哪里）',
+    refreshFailed: '（换一批失败了，Muse网络不太稳，等几秒再试）',
   },
 
   // ─── 章节卡 ───────────────────────────────────────────────────

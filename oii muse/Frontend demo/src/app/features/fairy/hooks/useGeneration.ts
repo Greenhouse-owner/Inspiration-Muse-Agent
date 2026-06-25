@@ -23,9 +23,10 @@ import { useCallback, useRef, useState, type RefObject } from 'react';
 import {
   generateStory, generateCharacter, generateWorldview,
 } from '../../../services/generateService';
-import { refineResult, refineSmart } from '../../../services/refineService';
+import { refineResult, refineSmart, refreshSwaps } from '../../../services/refineService';
 import type {
   Tag, CreationPath, CurrentResult, StoryChapter,
+  Recipe, SwapBatch, SwapInstruction,
 } from '../../../types';
 import { CONFIG } from '../../../config';
 import { T } from '../../../i18n/zh';
@@ -142,7 +143,17 @@ export function useGeneration(args: {
   // ── Refine 智能分发 ─────────────────────────────────────────────────────
   // story 路径走 smart refine（AI 决定改故事 / 改章节 / 都改）
   // character / worldview 仍走旧 refineResult
-  const refine = useCallback(async (text: string) => {
+  //
+  // v1.2 起接 swap：story 路径可以额外传 swapInstructions / currentRecipe /
+  // excludeSwapTexts，AI 一次返回新故事 + 新 recipe + 新 swaps。
+  const refine = useCallback(async (
+    text: string,
+    swapArgs?: {
+      currentRecipe?: Recipe;
+      swapInstructions?: SwapInstruction[];
+      excludeSwapTexts?: string[];
+    },
+  ) => {
     const cur = currentResultRef.current;
     if (!cur) return;
 
@@ -165,11 +176,28 @@ export function useGeneration(args: {
           cur.story,
           chapters.length > 0 ? chapters : undefined,
           ctrl.signal,
+          swapArgs ? {
+            path: 'story',
+            currentRecipe: swapArgs.currentRecipe,
+            swapInstructions: swapArgs.swapInstructions,
+            excludeSwapTexts: swapArgs.excludeSwapTexts,
+          } : undefined,
         );
         const now = new Date().toISOString();
         const updates: ChatMessage[] = [];
         if (res.story) {
-          setCurrentResult({ resultType: 'story', story: res.story });
+          // 后端可能在 story.recipe / story.swaps 里塞了新一轮的配方词卡；
+          // 顶层 res.recipe / res.swaps 也可能有（service 层做了双写）。
+          // 优先取 story 内的，缺则回退到顶层。
+          // 关键：AI 在纯文字 refine 时 prompt 允许 recipe/swaps 返回 null（"前端会保留前一轮配方"）；
+          // 此时必须从旧 currentResult 拿，否则调味区会消失。
+          const oldStory = currentResultRef.current?.story;
+          const mergedStory = {
+            ...res.story,
+            recipe: res.story.recipe ?? res.recipe ?? oldStory?.recipe,
+            swaps: res.story.swaps ?? res.swaps ?? oldStory?.swaps,
+          };
+          setCurrentResult({ resultType: 'story', story: mergedStory });
           updates.push({
             id: mid(), role: 'muse', resultType: 'story',
             content: res.story.content, createdAt: now,
@@ -182,7 +210,9 @@ export function useGeneration(args: {
             chapters: res.chapters, content: '', createdAt: now,
           });
         }
-        if (res.note) {
+        if (res.note && !swapArgs) {
+          // 调味期（swapArgs 非空）的 note 不进流：用户已经从 StageHint 副标题
+          // 看到了"换成 X，故事就会..."的预览，再回显一遍 note 太啰嗦。
           updates.push({
             id: mid(), role: 'muse', resultType: 'hint',
             content: res.note, createdAt: now,
@@ -256,11 +286,67 @@ export function useGeneration(args: {
     appendMessage, appendMessages, setMuseState, spawnStars,
   ]);
 
+  // ── Refresh swaps（仅刷新词卡，结果与配方不变。走 cheap 模型 1-2 秒）──
+  const refreshSwapsAction = useCallback(async (
+    excludeSwapTexts?: string[],
+  ): Promise<SwapBatch | null> => {
+    const cur = currentResultRef.current;
+    if (!cur) return null;
+
+    // 拿到当前 outline 文本 + recipe，根据 path 选字段
+    let outline = '';
+    let recipe: Recipe | undefined;
+    if (cur.resultType === 'story' && cur.story) {
+      outline = cur.story.content;
+      recipe = cur.story.recipe;
+    } else if (cur.resultType === 'character' && cur.character) {
+      const c = cur.character;
+      outline = [c.identity, c.personality, c.wound, c.desire].filter(Boolean).join('\n');
+      recipe = c.recipe;
+    } else if (cur.resultType === 'worldview' && cur.worldview) {
+      const w = cur.worldview;
+      outline = [w.coreRule, w.cost, w.taboo, w.socialImpact].filter(Boolean).join('\n');
+      recipe = w.recipe;
+    }
+    if (!recipe || !outline) return null;
+
+    // ⚠️ AbortController 必须挂到 inflightRef，让 handleRestart / 切路径 / 新请求都能 abort 它。
+    // 之前是新建一个独立 controller 没挂 ref，导致重选/切路径后旧响应回来仍 setCurrentResult，
+    // 把已清空的状态写回（refresh-swaps 抗中断 bug）。
+    inflightRef.current?.abort();
+    const ctrl = new AbortController();
+    inflightRef.current = ctrl;
+    try {
+      const res = await refreshSwaps(currentPath, outline, recipe, excludeSwapTexts, ctrl.signal);
+      // resolve 后再读一次 ref：如果用户中途清空了 currentResult（重选）或换了一轮（refine 完成），
+      // 这一次 refresh 的结果已经过期，丢弃。
+      if (currentResultRef.current !== cur) return null;
+      if (!res.swaps) return null;
+
+      // 局部更新 currentResult 中的 swaps，不动 content / recipe
+      const next: CurrentResult = { ...cur };
+      if (next.resultType === 'story' && next.story) {
+        next.story = { ...next.story, swaps: res.swaps };
+      } else if (next.resultType === 'character' && next.character) {
+        next.character = { ...next.character, swaps: res.swaps };
+      } else if (next.resultType === 'worldview' && next.worldview) {
+        next.worldview = { ...next.worldview, swaps: res.swaps };
+      }
+      setCurrentResult(next);
+      return res.swaps;
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return null;
+      console.warn('[muse] refreshSwaps failed', err);
+      return null;
+    }
+  }, [currentPath, inflightRef]);
+
   return {
     currentResult,
     setCurrentResult,
     currentResultRef,        // 给 Fairy 主壳的 sendMessage 路由用
     generate,
     refine,
+    refreshSwapsAction,
   };
 }

@@ -44,6 +44,25 @@ export function tagColors(tag: Tag, selected: boolean) {
     : { border: C.chipBd, background: C.chipBg, color: C.chipTxt, fontWeight: 400 };
 }
 
+// ─── 调味词卡配色（调味期专属，薄荷绿 #2ADFFF）────────────────────
+// 跟撒网期的 AI 绿 #4CAF50 不同，让用户视觉上立刻感知"进入新阶段"。
+export function swapCardColors(selected: boolean) {
+  if (selected) {
+    return {
+      border: C.swapPrimary,
+      background: C.swapPrimary,
+      color: '#3D2A00',
+      fontWeight: 600,
+    };
+  }
+  return {
+    border: C.swapBd,
+    background: C.swapBg,
+    color: C.swapTxt,
+    fontWeight: 500,
+  };
+}
+
 // ─── 数组洗牌 ───────────────────────────────────────────────────────
 export function shuffleTags(tags: Tag[]) {
   return [...tags].sort(() => Math.random() - 0.5);

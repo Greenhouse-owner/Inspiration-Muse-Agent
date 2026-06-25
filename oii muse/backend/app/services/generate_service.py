@@ -38,14 +38,25 @@ from app.schemas.result import (
     GenerateWorldviewResponse,
     InsertStoryChapterRequest,
     InsertStoryChapterResponse,
+    Recipe,
+    RecipeSlot,
     StoryChapterDTO,
     StoryChaptersRequest,
     StoryChaptersResponse,
     StoryResult,
+    SwapBatch,
+    SwapCard,
     WorldviewResult,
 )
 from app.services.ai_provider import AIError, call_ai
 from app.services.json_utils import extract_json
+from app.services.recipe_utils import (
+    CHARACTER_FIELDS,
+    STORY_FIELDS,
+    WORLDVIEW_FIELDS,
+    coerce_recipe,
+    coerce_swaps,
+)
 
 log = logging.getLogger(__name__)
 
@@ -102,8 +113,35 @@ def _mock_story(req: GenerateRequest) -> StoryResult:
 
     template = random.choice(_STORY_TEMPLATES)
     return StoryResult(
-        content=template.format(world=world, scene=scene, char=char, event=event)
+        content=template.format(world=world, scene=scene, char=char, event=event),
+        recipe=Recipe(slots=[
+            RecipeSlot(field="character", value=(char or "主角")[:32]),
+            RecipeSlot(field="conflict",  value=(event or "冲突")[:32]),
+            RecipeSlot(field="worldview", value=(worlds[0] if worlds else (scene or "未知世界"))[:32]),
+        ]),
+        swaps=_MOCK_STORY_SWAPS,
     )
+
+
+# 离线模式下的固定调味词卡。这里 9 张挑通用的、跨题材都能用的，
+# 不依赖具体已选词，让用户在 AI 不可达时仍能体验调味交互。
+_MOCK_STORY_SWAPS = SwapBatch(cards={
+    "character": [
+        SwapCard(label="冒牌公主", preview="继位典礼前发现王室族谱被人篡改"),
+        SwapCard(label="失忆刺客", preview="醒来发现这次的任务目标是自己"),
+        SwapCard(label="怪物医生", preview="专给非人之物看病的孤独医师"),
+    ],
+    "conflict": [
+        SwapCard(label="时间倒流", preview="每死一次就会回到当天清晨"),
+        SwapCard(label="被全城追捕", preview="所有人都坚信主角是凶手"),
+        SwapCard(label="未来来信", preview="收到自己未来寄来的最后一封信"),
+    ],
+    "worldview": [
+        SwapCard(label="时间图书馆", preview="每本书都预先写出读者的死亡日期"),
+        SwapCard(label="亡灵邮局", preview="只能向已经死去的人寄出书信"),
+        SwapCard(label="谎言之城", preview="只有谎言才能在这座城里成真"),
+    ],
+})
 
 
 async def generate_story(
@@ -113,10 +151,29 @@ async def generate_story(
     user_prompt = STORY_USER_TEMPLATE.format(selected_tags_json=_tags_json(req))
     try:
         raw = await call_ai(client, STORY_SYSTEM, user_prompt, temperature=0.85)
-        content = raw.strip()
+        # JSON 输出：含 content + recipe + swaps。
+        # 解析失败时退回到把 raw 当纯文本用，保证至少能看故事。
+        content = ""
+        recipe = None
+        swaps = None
+        try:
+            data = extract_json(raw)
+            if isinstance(data, dict):
+                content = str(data.get("content") or "").strip()
+                recipe = coerce_recipe(data.get("recipe"), allowed_fields=STORY_FIELDS)
+                swaps = coerce_swaps(data.get("swaps"), recipe)
+        except ValueError:
+            pass
+
+        if not content:
+            # 旧风格 / 解析失败 → 整段当 content 用
+            content = raw.strip()
         if not content:
             raise AIError("empty story content")
-        return GenerateStoryResponse(result=StoryResult(content=content))
+
+        return GenerateStoryResponse(
+            result=StoryResult(content=content, recipe=recipe, swaps=swaps)
+        )
     except AIError as e:
         log.warning("generate_story: AI failed (%s); falling back to mock", e)
         return GenerateStoryResponse(result=_mock_story(req))
@@ -128,6 +185,52 @@ _CHARACTER_FIELDS = (
     "name", "identity", "personality", "wound",
     "desire", "fear", "secret", "arc",
 )
+
+# 每个调味槽位的 mock 词卡。LLM 在线时这些走 LLM 输出，离线 / 解析失败才用这套。
+_MOCK_CHARACTER_SWAP_POOL: dict[str, list[SwapCard]] = {
+    "identity": [
+        SwapCard(label="冒牌公主", preview="继位典礼前发现王室族谱被人篡改"),
+        SwapCard(label="退休杀手", preview="为保护邻家女孩重新拿起武器"),
+        SwapCard(label="怪物医生", preview="专给非人之物看病的孤独医师"),
+    ],
+    "personality": [
+        SwapCard(label="冷峻克制", preview="情绪从不外露，但每个决定都精确得吓人"),
+        SwapCard(label="玩世不恭", preview="用笑声掩饰所有真心，关键时刻最先动手"),
+        SwapCard(label="偏执敏感", preview="一句话能琢磨三天，别人都觉得 ta 想多了"),
+    ],
+    "wound": [
+        SwapCard(label="目睹至亲死去", preview="那场死亡的画面成为 ta 余生的滤镜"),
+        SwapCard(label="被亲人背叛", preview="最信任的人亲手交出了自己"),
+        SwapCard(label="自己制造的灾难", preview="那场祸事的源头是 ta 不愿承认的一念"),
+    ],
+    "desire": [
+        SwapCard(label="向死神复仇", preview="把每一个欠下的命都用相同方式收回"),
+        SwapCard(label="找回失踪的爱人", preview="哪怕证据都说那个人从未存在过"),
+        SwapCard(label="毁掉自己的杰作", preview="只有亲手销毁才能真正自由"),
+    ],
+    "fear": [
+        SwapCard(label="再次失败", preview="比死更怕的是又一次什么都没救成"),
+        SwapCard(label="被发现真相", preview="一旦被识破，所有关系会一夜崩塌"),
+        SwapCard(label="变成最讨厌的人", preview="那个曾经发誓不会成为的样子正在靠近"),
+    ],
+    "secret": [
+        SwapCard(label="杀过人", preview="那一夜的尸体从未被发现，但 ta 记得"),
+        SwapCard(label="非人血统", preview="某些月夜身体会出现解释不了的变化"),
+        SwapCard(label="日记全是谎话", preview="写下来的每一句都是写给将来读它的人看的"),
+    ],
+    "arc": [
+        SwapCard(label="从冷漠到牺牲", preview="从只顾自己到为陌生人挡下最后一刀"),
+        SwapCard(label="从善良到黑化", preview="善良在这个世界里被反复利用直到再也举不起"),
+        SwapCard(label="困在原地", preview="想成为另一个人却最终活回了原来的样子"),
+    ],
+}
+
+
+def _fixed_mock_recipe_slots(fields: tuple[str, ...], values: dict[str, str]) -> Recipe:
+    """mock 路径下，按钦定的 3 个 field 顺序生成 recipe（不随机）。"""
+    return Recipe(slots=[
+        RecipeSlot(field=f, value=values.get(f, f)[:32]) for f in fields
+    ])
 
 
 def _mock_character(req: GenerateRequest) -> CharacterResult:
@@ -153,6 +256,21 @@ def _mock_character(req: GenerateRequest) -> CharacterResult:
     else:
         secret = "她内心的另一个声音一直在替她隐瞒什么。"
 
+    # 钦定 3 槽：identity / wound / desire
+    field_values = {
+        "identity": identity[:8] or "无名之人",
+        "wound":    wound_seed[:8] or "童年阴影",
+        "desire":   desire_seed[:8] or "找寻真相",
+    }
+    recipe = _fixed_mock_recipe_slots(
+        ("identity", "wound", "desire"),
+        field_values,
+    )
+    swaps = SwapBatch(cards={
+        slot.field: list(_MOCK_CHARACTER_SWAP_POOL[slot.field])
+        for slot in recipe.slots
+    })
+
     return CharacterResult(
         name=name,
         identity=identity_line,
@@ -162,6 +280,8 @@ def _mock_character(req: GenerateRequest) -> CharacterResult:
         fear=f"害怕发现{fear_seed}是自己制造的。",
         secret=secret,
         arc=f"从{pers}到主动面对；从逃避到承认；最终要在沉默与真相之间做出一个选择。",
+        recipe=recipe,
+        swaps=swaps,
     )
 
 
@@ -179,8 +299,14 @@ async def generate_character(
         if missing:
             raise AIError(f"character JSON missing fields: {missing}")
         # Trim to known fields and coerce to schema (silently drops extras).
+        recipe = coerce_recipe(data.get("recipe"), allowed_fields=CHARACTER_FIELDS)
+        swaps = coerce_swaps(data.get("swaps"), recipe)
         return GenerateCharacterResponse(
-            result=CharacterResult(**{k: data[k] for k in _CHARACTER_FIELDS})
+            result=CharacterResult(
+                **{k: data[k] for k in _CHARACTER_FIELDS},
+                recipe=recipe,
+                swaps=swaps,
+            )
         )
     except (AIError, ValueError) as e:
         log.warning("generate_character: AI failed (%s); falling back to mock", e)
@@ -190,6 +316,34 @@ async def generate_character(
 # ─── Worldview ────────────────────────────────────────────────────────────────
 
 _WORLDVIEW_FIELDS = ("title", "coreRule", "cost", "taboo", "socialImpact", "conflictHooks")
+
+_MOCK_WORLDVIEW_SWAP_POOL: dict[str, list[SwapCard]] = {
+    "coreRule": [
+        SwapCard(label="预知死期", preview="书会预先写出读者的死亡日期"),
+        SwapCard(label="谎言成真", preview="只有谎言才能在这座城里成真"),
+        SwapCard(label="影子分裂", preview="每个人的影子拥有独立意志"),
+    ],
+    "cost": [
+        SwapCard(label="折寿", preview="每次施展规则都要付出一段真实寿命"),
+        SwapCard(label="忘故人", preview="代价是从此忘记一个最在乎的人"),
+        SwapCard(label="替身偿还", preview="必须有另一个人替你承担这次后果"),
+    ],
+    "taboo": [
+        SwapCard(label="不可直名", preview="不能在月光下直呼真名否则被替换"),
+        SwapCard(label="不可照镜", preview="日落后照镜子会被另一面拉走"),
+        SwapCard(label="不可记梦", preview="梦境一旦写下来就会照进现实"),
+    ],
+    "socialImpact": [
+        SwapCard(label="贫者无声", preview="买不起规则的人逐渐从社会里消失"),
+        SwapCard(label="阶层倒挂", preview="掌握规则的人反而是最被监视的群体"),
+        SwapCard(label="规则崇拜", preview="人们把规则当成新宗教供奉"),
+    ],
+    "conflictHooks": [
+        SwapCard(label="规则反噬", preview="新一代发现规则正在吞噬制定者"),
+        SwapCard(label="地下版本", preview="黑市流通着被官方禁用的旧规则"),
+        SwapCard(label="替换计划", preview="某个组织正在悄悄改写核心规则的语义"),
+    ],
+}
 
 
 def _mock_worldview(req: GenerateRequest) -> WorldviewResult:
@@ -218,6 +372,21 @@ def _mock_worldview(req: GenerateRequest) -> WorldviewResult:
         "政府正在推行下一个版本的规则，旧版本的痕迹将被抹除",
     ]
 
+    # 钦定 3 槽：coreRule / taboo / conflictHooks
+    field_values = {
+        "coreRule":      core[:8] or "记忆交易",
+        "taboo":         "不可触双规",
+        "conflictHooks": (story_tags[0] if story_tags else "规则漏洞")[:8],
+    }
+    recipe = _fixed_mock_recipe_slots(
+        ("coreRule", "taboo", "conflictHooks"),
+        field_values,
+    )
+    swaps = SwapBatch(cards={
+        slot.field: list(_MOCK_WORLDVIEW_SWAP_POOL[slot.field])
+        for slot in recipe.slots
+    })
+
     return WorldviewResult(
         title=f"{era}·{core}法则",
         coreRule=(
@@ -227,6 +396,8 @@ def _mock_worldview(req: GenerateRequest) -> WorldviewResult:
         taboo="不能同时触发两个规则节点，否则现实层会发生折叠。",
         socialImpact=social,
         conflictHooks=hooks,
+        recipe=recipe,
+        swaps=swaps,
     )
 
 
@@ -246,6 +417,8 @@ async def generate_worldview(
         hooks = data.get("conflictHooks") or []
         if not isinstance(hooks, list) or not all(isinstance(h, str) for h in hooks):
             raise AIError("worldview conflictHooks must be a list of strings")
+        recipe = coerce_recipe(data.get("recipe"), allowed_fields=WORLDVIEW_FIELDS)
+        swaps = coerce_swaps(data.get("swaps"), recipe)
         return GenerateWorldviewResponse(
             result=WorldviewResult(
                 title=data["title"],
@@ -254,6 +427,8 @@ async def generate_worldview(
                 taboo=data["taboo"],
                 socialImpact=data["socialImpact"],
                 conflictHooks=hooks[:5],
+                recipe=recipe,
+                swaps=swaps,
             )
         )
     except (AIError, ValueError) as e:

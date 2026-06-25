@@ -29,6 +29,12 @@ export const theme = {
   chipBg:  'rgba(255,45,120,.18)',
   chipBd:  'rgba(255,45,120,.32)',
   chipTxt: '#FFCCDC',
+
+  // 调味期色 #FFCC31 暖黄（与撒网 AI 词卡的深绿 #4CAF50 区分，标识阶段切换）
+  swapPrimary: '#FFCC31',
+  swapBg:      'rgba(255,204,49,.14)',
+  swapBd:      'rgba(255,204,49,.45)',
+  swapTxt:     '#FFE9A3',
 } as const;
 
 export type Theme = typeof theme;

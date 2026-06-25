@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import "./fairy.css";
 import { type CreationPath, PATH_META } from "../data/localTags";
+import { metaForField } from "../data/recipeSlots";
 import { parseIntent } from "../services/inputIntent";
 import { T } from "../i18n/zh";
 import { CONFIG } from "../config";
-import { IconArrowUpRight, IconRefresh } from "./icons";
+import { IconRefresh } from "./icons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // ChatMessage / MuseState 已搬到 features/fairy/types（C5）
@@ -36,10 +37,13 @@ import { StageHint } from "../features/fairy/components/StageHint";
 import { ChapterListCard } from "../features/fairy/components/ChapterListCard";
 import { TabbedHead } from "../features/fairy/components/TabbedHead";
 import { CopyButton } from "../features/fairy/components/CopyButton";
+import { SwapCloud } from "../features/fairy/components/SwapCloud";
+import { type ChipTag } from "../features/fairy/components/ChipAwareInput";
 import { useTagCloud } from "../features/fairy/hooks/useTagCloud";
 import { useAiCachePrefetch } from "../features/fairy/hooks/useAiCachePrefetch";
 import { useChapters } from "../features/fairy/hooks/useChapters";
 import { useGeneration } from "../features/fairy/hooks/useGeneration";
+import { useRecipe } from "../features/fairy/hooks/useRecipe";
 
 // ─── Main Fairy component ─────────────────────────────────────────────────────
 
@@ -57,6 +61,7 @@ export function Fairy() {
     setAnalysis,
     latestBatchRef, latestExcludeRef, latestTagStateKeyRef,
     toggleTag, removeSelected, addSelectedFromInput, refreshBatch: refreshBatchInternal,
+    summonFairy,
     resetCloudForPath, resetCloudAfterGenerate,
   } = cloud;
 
@@ -137,14 +142,115 @@ export function Fairy() {
     setMuseState,
     spawnStars,
   });
-  const { currentResult, setCurrentResult, generate, refine } = generationHook;
+  const { currentResult, setCurrentResult, generate, refine, refreshSwapsAction } = generationHook;
   // 把 currentResultRef 暴露给 useChapters 的 getCurrentResult
   currentResultGetterRef.current = () => generationHook.currentResultRef.current;
+
+  // ── 调味词卡状态机（C6 抽出到 useRecipe）──────────────────────────
+  // 只管 pendingTags / pendingText / lastPickedCard 这些 UI 状态。
+  // refine-smart 真实调用走 useGeneration.refine；🔄 走 refreshSwapsAction。
+  const recipeHook = useRecipe({ currentResult });
+  const {
+    recipe, swaps,
+    pendingTags, pendingText,
+    setPendingTags, setPendingText,
+    lastPickedCard,
+    togglePendingTag, clearPending,
+  } = recipeHook;
+
+  // 调味区是否就绪（后端返回了 recipe + swaps 才显示）
+  const swapReady = !!(recipe && swaps);
+
+  // 调味词卡的滑动窗口：累计展示过的 label，下次 swap / refresh 时通过
+  // excludeSwapTexts 喂给 AI，让 AI 出新词避免重复。
+  // 上限 CONFIG.swapCards.excludeWindow（默认 60），超出从最早的弹掉。
+  const swapExcludeRef = useRef<string[]>([]);
+  const [swapRefreshing, setSwapRefreshing] = useState(false);
+  // 召唤精灵 ✨ 状态：撒网期一次性"全 AI 词云"操作
+  const [summoning, setSummoning] = useState(false);
+
+  // 每次 swaps 变更（生成 / refine / refresh），把新词追加到 exclude 窗口
+  useEffect(() => {
+    if (!swaps) return;
+    const newLabels: string[] = [];
+    for (const cards of Object.values(swaps.cards)) {
+      for (const c of cards) newLabels.push(c.label);
+    }
+    const merged = [...swapExcludeRef.current];
+    for (const l of newLabels) {
+      if (!merged.includes(l)) merged.push(l);
+    }
+    const max = CONFIG.swapCards.excludeWindow;
+    swapExcludeRef.current = merged.length > max ? merged.slice(merged.length - max) : merged;
+  }, [swaps]);
 
   // Derived state
   const hasGeneratedResult = currentResult !== null;
   const isThinking  = museState === 'thinking';
   const canGenerate = selectedTags.length >= CONFIG.generation.minTagsToGenerate && !isThinking;
+
+  // ── Swap 真接口 ──────────────────────────────────────────────────────────
+  // 故事路径：走 refine-smart（含 swapInstructions），LLM 一次返回新故事 + 新 recipe + 新 swaps
+  // 角色 / 世界观：走老接口 refineResult（patch 协议）+ 自动 refresh-swaps 刷新词卡
+  const handleSwapSend = useCallback(async (
+    tagsToSend: ChipTag[], textToSend: string,
+  ) => {
+    if (!recipe) return;
+    if (currentPath === 'story') {
+      await refine(textToSend, {
+        currentRecipe: recipe,
+        swapInstructions: tagsToSend.map(t => ({ field: t.field, label: t.label })),
+        excludeSwapTexts: [...swapExcludeRef.current],
+      });
+      return;
+    }
+    // 角色 / 世界观：把 swap 翻译成自然语言指令喂给 refineResult
+    // 例如 [{identity:冒牌公主},{wound:童年阴影}] + 文字 "再黑暗一点"
+    //   → "把身份改成「冒牌公主」；把创伤改成「童年阴影」；再黑暗一点；其它字段顺势保持连贯。"
+    const swapPhrases = tagsToSend.map(t => {
+      const slotLabel = metaForField(currentPath, t.field).label || t.field;
+      return `把${slotLabel}改成「${t.label}」`;
+    });
+    const composed = [
+      ...swapPhrases,
+      textToSend.trim() ? textToSend.trim() : '',
+      '其它字段顺势保持连贯，不要凭空抹掉原设定。',
+    ].filter(Boolean).join('；');
+    await refine(composed);
+    // 替换完成后，词卡也要刷新（refineResult 不返回新 swaps，自己拉一次）。
+    // 改成 await（去掉 setTimeout 时序耦合 hack）：refine 完成后 currentResult 已写新值，
+    // 这时 refreshSwapsAction 内部读 currentResultRef 拿到的就是新结果。
+    await refreshSwapsAction([...swapExcludeRef.current]);
+  }, [recipe, currentPath, refine, refreshSwapsAction]);
+
+  const handleSwapRefresh = useCallback(async () => {
+    if (swapRefreshing) return;
+    setSwapRefreshing(true);
+    try {
+      const next = await refreshSwapsAction([...swapExcludeRef.current]);
+      if (!next) {
+        // 降级：给个轻量提示，但不打扰
+        console.warn('[muse] refreshSwaps degraded, keeping current swaps');
+      }
+    } finally {
+      setSwapRefreshing(false);
+    }
+  }, [refreshSwapsAction, swapRefreshing]);
+
+  // ── Restart：调味期 → 回到撒网期。故事卡留在聊天流里，不删 ─────────────
+  const handleRestart = useCallback(() => {
+    if (isThinking) return;
+    setCurrentResult(null);
+    resetChapters();
+    inflightRef.current?.abort();
+    clearPending();
+    resetCloudForPath(currentPath);
+    invalidateCache();
+    swapExcludeRef.current = [];
+  }, [
+    isThinking, setCurrentResult, resetChapters, clearPending,
+    resetCloudForPath, currentPath, invalidateCache,
+  ]);
 
   // 包一层 refreshBatch：消费蓄水池 + 调 hook 内部的 refresh
   // 蓄水池逻辑已封装在 consumeFromCache（C4）
@@ -160,6 +266,23 @@ export function Fairy() {
     }
     refreshBatchInternal({ escMode });
   }, [escape, aiTagCache.length, AI_PER_REFRESH, consumeFromCache, refreshBatchInternal]);
+
+  // 召唤精灵 ✨：撒网期专属，独立路径调一次 dynamic-cloud 拉 18 张全 AI 词。
+  // 状态：summoning -> 按钮 disabled + IconRefresh 旋转。完成后用户可继续选词，
+  // 或按 🔄 换一批回到漏斗规则混搭模式。
+  const handleSummonFairy = useCallback(async () => {
+    if (summoning) return;
+    setSummoning(true);
+    // ⚠️ 把 ctrl 挂 inflightRef，重选/切路径/新生成都能 abort 它
+    inflightRef.current?.abort();
+    const ctrl = new AbortController();
+    inflightRef.current = ctrl;
+    try {
+      await summonFairy(ctrl.signal);
+    } finally {
+      setSummoning(false);
+    }
+  }, [summoning, summonFairy]);
 
   // Auto-scroll
   useEffect(() => {
@@ -196,6 +319,8 @@ export function Fairy() {
     inflightRef.current?.abort();
     // 旧路径预取的 AI 词卡不再适用，让蓄水池清空 + 节流 + abort
     invalidateCache();
+    // 调味词卡的滑动窗口跟随路径走，切路径要清空避免把旧路径的词喂给新路径的 AI exclude
+    swapExcludeRef.current = [];
   }, [isThinking, resetCloudForPath, invalidateCache, setCurrentResult, resetChapters]);
 
   // ── Add custom tag ─────────────────────────────────────────────────────────
@@ -212,6 +337,46 @@ export function Fairy() {
   // 这里只做：意图解析 + 用户消息回显 + 路由分发。
   const sendMessage = useCallback(async () => {
     if (isThinking) return;
+
+    // ── Swap 模式：输入框走 ChipAwareInput，发送 pendingTags + pendingText
+    if (hasGeneratedResult && swapReady) {
+      const tagsToSend: ChipTag[] = pendingTags;
+      const textToSend = pendingText.trim();
+      if (tagsToSend.length === 0 && !textToSend) return;
+
+      // 走 swap 路径还是纯 refine 路径？
+      // 调味期点 ↑ 不回显用户消息到聊天流（产品决策）：
+      // 调味动作的语义已经被 StageHint 副标题 + 词卡选中态表达了，
+      // 再在聊天流里塞一条"冒牌公主 失忆刺客"会污染对话历史。
+      if (tagsToSend.length > 0) {
+        // 调味替换：story 路径走 refine-smart 含 swapInstructions；
+        // 其它路径在 handleSwapSend 内会显示暂未接入提示。
+        await handleSwapSend(tagsToSend, textToSend);
+      } else {
+        // 没 tag 但有文字：走原 refine（保留 parseIntent 行为）
+        // 纯文字 refine 仍然需要回显（保持与撒网期 refine 一致）
+        appendMessage({
+          id: mid(), role: 'user', content: textToSend,
+          createdAt: new Date().toISOString(),
+        });
+        const intent = parseIntent(textToSend);
+        if (intent.kind === 'chapters') {
+          await generateChapters(intent.count);
+        } else if (intent.kind === 'refine') {
+          await refine(intent.text);
+        } else if (intent.kind === 'invalid') {
+          appendMessage({
+            id: mid(), role: 'muse', resultType: 'hint',
+            content: `（${intent.reason}）`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      clearPending();
+      return;
+    }
+
+    // ── 旧路径：还在撒网阶段，或后端没返回 recipe ──────────────────────
     const text = input.trim();
     if (text.length < 2) return; // "嗯" "好" 不该触发后端
     if (!currentResult) {
@@ -254,8 +419,9 @@ export function Fairy() {
     }
   }, [
     input, isThinking, currentResult,
+    hasGeneratedResult, swapReady, pendingTags, pendingText, clearPending,
     appendMessage, appendMessages,
-    generateChapters, refine,
+    generateChapters, refine, handleSwapSend,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -312,8 +478,8 @@ export function Fairy() {
             )}
           </div>
 
-          {/* Locked tags */}
-          {selectedTags.length > 0 && (
+          {/* Locked tags —— 撒网期显示用户已选词；调味期复用此位置显示 pendingTags */}
+          {!swapReady && selectedTags.length > 0 && (
             <div style={{
               padding: '7px 12px',
               borderBottom: `1px solid ${C.border}`,
@@ -339,6 +505,37 @@ export function Fairy() {
               })}
             </div>
           )}
+          {swapReady && pendingTags.length > 0 && (
+            <div style={{
+              padding: '7px 12px',
+              borderBottom: `1px solid ${C.border}`,
+              display: 'flex', flexWrap: 'wrap', gap: 5,
+              flexShrink: 0,
+            }}>
+              {pendingTags.map(t => {
+                const TagIcon = PATH_META[currentPath].Icon;
+                return (
+                  <button
+                    key={`${t.field}:${t.label}`}
+                    onClick={() => togglePendingTag(t.field, t.label)}
+                    title={t.field}
+                    style={{
+                      padding: '3px 8px', borderRadius: 5, border: 'none',
+                      background: C.p, color: '#fff',
+                      fontSize: 11, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <span style={{ opacity: .6, display: 'inline-flex' }}>
+                      <TagIcon size={10} />
+                    </span>
+                    {t.label}
+                    <span style={{ opacity: .5, fontSize: 9 }}>✕</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Path navigation + tabbed card (SVG concave-fillet) */}
           <div style={{ padding: '10px 12px 0', flexShrink: 0 }}>
@@ -348,39 +545,55 @@ export function Fairy() {
               disabled={isThinking}
               width={352 - 24}
             >
-              <StageHint stage={stage} analysis={analysis} isDegraded={isDegraded} />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {batch.map((tag, i) => {
-                  const sel = selectedTags.some(t => t.text === tag.text);
-                  const sz  = tagFontSize(tag.text);
-                  const colors = tagColors(tag, sel);
-                  return (
-                    <button
-                      key={tag.id}
-                      className="muse-tag-in"
-                      onClick={() => toggleTag(tag, {
-                        // 选中池子里某张 AI 词，从池子移除避免下次刷新重复
-                        onSelectFromCache: removeFromCache,
-                      })}
-                      title={tag.source === 'ai' ? T.fairy.tagTitleAi : T.fairy.tagTitleLocal}
-                      style={{
-                        animationDelay: `${i * 20}ms`,
-                        padding: `${sz.py}px ${sz.px}px`,
-                        borderRadius: 6,
-                        border: `1px solid ${colors.border}`,
-                        background: colors.background,
-                        color: colors.color,
-                        fontSize: sz.fs,
-                        cursor: 'pointer',
-                        transition: 'all .15s ease',
-                        fontWeight: colors.fontWeight,
-                      }}
-                    >
-                      {tag.text}
-                    </button>
-                  );
-                })}
-              </div>
+              <StageHint
+                stage={stage}
+                analysis={analysis}
+                isDegraded={isDegraded}
+                swapMode={swapReady}
+                swapPreview={lastPickedCard?.preview ?? null}
+              />
+              {swapReady && recipe && swaps ? (
+                <SwapCloud
+                  recipe={recipe}
+                  swaps={swaps}
+                  path={currentPath}
+                  pendingTags={pendingTags}
+                  onCardClick={togglePendingTag}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {batch.map((tag, i) => {
+                    const sel = selectedTags.some(t => t.text === tag.text);
+                    const sz  = tagFontSize(tag.text);
+                    const colors = tagColors(tag, sel);
+                    return (
+                      <button
+                        key={tag.id}
+                        className="muse-tag-in"
+                        onClick={() => toggleTag(tag, {
+                          // 选中池子里某张 AI 词，从池子移除避免下次刷新重复
+                          onSelectFromCache: removeFromCache,
+                        })}
+                        title={tag.source === 'ai' ? T.fairy.tagTitleAi : T.fairy.tagTitleLocal}
+                        style={{
+                          animationDelay: `${i * 20}ms`,
+                          padding: `${sz.py}px ${sz.px}px`,
+                          borderRadius: 6,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.background,
+                          color: colors.color,
+                          fontSize: sz.fs,
+                          cursor: 'pointer',
+                          transition: 'all .15s ease',
+                          fontWeight: colors.fontWeight,
+                        }}
+                      >
+                        {tag.text}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </TabbedHead>
           </div>
 
@@ -391,30 +604,93 @@ export function Fairy() {
             flexShrink: 0,
           }}>
             <span style={{ color: C.sub, fontSize: 10 }}>
-              {selectedTags.length < 2
-                ? T.fairy.hintNeed(2 - selectedTags.length)
-                : canGenerate ? T.fairy.hintReady : ''}
+              {swapReady ? '' : (
+                selectedTags.length < 2
+                  ? T.fairy.hintNeed(2 - selectedTags.length)
+                  : canGenerate ? T.fairy.hintReady : ''
+              )}
             </span>
             <div style={{ display: 'flex', gap: 5 }}>
-              <button
-                onClick={() => refreshBatch(true)}
-                title={T.fairy.titleEscape}
-                style={ctrlBtn}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF9500'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#FF9500'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.sub; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
-              >
-                <IconArrowUpRight size={12} />
-                {T.fairy.btnEscape}
-              </button>
-              <button
-                onClick={() => refreshBatch(false)}
-                style={ctrlBtn}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.p; (e.currentTarget as HTMLButtonElement).style.borderColor = C.p; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.sub; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
-              >
-                <IconRefresh size={12} />
-                {T.fairy.btnRefresh}
-              </button>
+              {swapReady ? (
+                <>
+                  <button
+                    onClick={handleRestart}
+                    title="清空当前故事，回到选词重新开始"
+                    style={ctrlBtn}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#FF9500'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#FF9500'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.sub; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+                  >
+                    重选
+                  </button>
+                  <button
+                    onClick={handleSwapRefresh}
+                    disabled={swapRefreshing}
+                    style={{
+                      ...ctrlBtn,
+                      cursor: swapRefreshing ? 'wait' : 'pointer',
+                      opacity: swapRefreshing ? .6 : 1,
+                    }}
+                    onMouseEnter={e => {
+                      if (swapRefreshing) return;
+                      (e.currentTarget as HTMLButtonElement).style.color = theme.swapPrimary;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = theme.swapPrimary;
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLButtonElement).style.color = C.sub;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = C.border;
+                    }}
+                  >
+                    <span className={swapRefreshing ? 'muse-spin' : undefined}>
+                      <IconRefresh size={12} />
+                    </span>
+                    {T.fairy.btnRefresh}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {(() => {
+                    const canSummon = selectedTags.length > 0 && !summoning;
+                    const summonDisabled = !canSummon;
+                    return (
+                      <button
+                        onClick={handleSummonFairy}
+                        disabled={summonDisabled}
+                        title={selectedTags.length === 0
+                          ? '先选 1 个词，AI 才有方向可推'
+                          : T.fairy.titleSummon}
+                        style={{
+                          ...ctrlBtn,
+                          cursor: summoning ? 'wait' : (canSummon ? 'pointer' : 'not-allowed'),
+                          opacity: summonDisabled ? .35 : 1,
+                        }}
+                        onMouseEnter={e => {
+                          if (!canSummon) return;
+                          (e.currentTarget as HTMLButtonElement).style.color = '#4CAF50';
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#4CAF50';
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLButtonElement).style.color = C.sub;
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = C.border;
+                        }}
+                      >
+                        <span className={summoning ? 'muse-spin' : undefined}>
+                          {summoning ? <IconRefresh size={12} /> : <span style={{ fontSize: 12 }}>✨</span>}
+                        </span>
+                        {T.fairy.btnSummon}
+                      </button>
+                    );
+                  })()}
+                  <button
+                    onClick={() => refreshBatch(false)}
+                    style={ctrlBtn}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.p; (e.currentTarget as HTMLButtonElement).style.borderColor = C.p; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.sub; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+                  >
+                    <IconRefresh size={12} />
+                    {T.fairy.btnRefresh}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -422,11 +698,18 @@ export function Fairy() {
           {(messages.length > 0 || isThinking) && (() => {
             // 找到最近一条章节消息：只有它渲染最新章节状态并响应删除/插入
             let lastChaptersMsgId = '';
+            // 同时找到最近一条带有 muse 结果的消息（story/character/worldview）：
+            // 只在它底部渲染 RecipeBar，历史结果不挂配方栏。
+            let lastResultMsgId = '';
             for (let i = messages.length - 1; i >= 0; i--) {
-              if (messages[i].resultType === 'chapters') {
+              const rt = messages[i].resultType;
+              if (!lastChaptersMsgId && rt === 'chapters') {
                 lastChaptersMsgId = messages[i].id;
-                break;
               }
+              if (!lastResultMsgId && (rt === 'story' || rt === 'character' || rt === 'worldview')) {
+                lastResultMsgId = messages[i].id;
+              }
+              if (lastChaptersMsgId && lastResultMsgId) break;
             }
             return (
             <div style={{
@@ -524,8 +807,8 @@ export function Fairy() {
           }}>
             <input
               ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
+              value={swapReady ? pendingText : input}
+              onChange={e => swapReady ? setPendingText(e.target.value) : setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isThinking}
               placeholder={
@@ -553,14 +836,27 @@ export function Fairy() {
               onBlur={e  => (e.target.style.borderColor = C.border)}
             />
             {hasGeneratedResult ? (
-              <button onClick={sendMessage} disabled={!input.trim()} style={{
-                width: 32, height: 32, borderRadius: 8, border: 'none', flexShrink: 0,
-                background: input.trim() ? C.p : 'rgba(255,45,120,.15)',
-                color: input.trim() ? '#fff' : 'rgba(255,45,120,.3)',
-                cursor: input.trim() ? 'pointer' : 'default',
-                fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all .15s ease',
-              }}>↑</button>
+              <button
+                onClick={sendMessage}
+                disabled={isThinking || (swapReady ? (pendingTags.length === 0 && !pendingText.trim()) : !input.trim())}
+                style={{
+                  width: 32, height: 32, borderRadius: 8, border: 'none', flexShrink: 0,
+                  background: isThinking
+                    ? 'rgba(255,45,120,.15)'
+                    : (swapReady ? (pendingTags.length > 0 || pendingText.trim()) : input.trim()) ? C.p : 'rgba(255,45,120,.15)',
+                  color: isThinking
+                    ? 'rgba(255,45,120,.7)'
+                    : (swapReady ? (pendingTags.length > 0 || pendingText.trim()) : input.trim()) ? '#fff' : 'rgba(255,45,120,.3)',
+                  cursor: isThinking
+                    ? 'wait'
+                    : (swapReady ? (pendingTags.length > 0 || pendingText.trim()) : input.trim()) ? 'pointer' : 'default',
+                  fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all .15s ease',
+                }}>
+                {isThinking ? (
+                  <span className="muse-spin"><IconRefresh size={14} /></span>
+                ) : '↑'}
+              </button>
             ) : (
               <button
                 onClick={input.trim() ? addCustomTag : canGenerate ? generate : undefined}

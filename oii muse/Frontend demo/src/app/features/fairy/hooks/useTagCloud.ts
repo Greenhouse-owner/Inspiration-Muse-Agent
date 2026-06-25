@@ -25,7 +25,7 @@ import {
   type Tag, type CreationPath, type FunnelStage,
   calcStage, drawBatch,
 } from '../../../data/localTags';
-import { makeStateKey } from '../../../services/tagService';
+import { fetchDynamicCloud, makeStateKey } from '../../../services/tagService';
 import type { DynamicTagAnalysis } from '../../../types';
 import { CONFIG } from '../../../config';
 import {
@@ -180,6 +180,52 @@ export function useTagCloud(args: {
     setEscape(false);
   }, [escape, currentPath, selectedTags, excludeTexts, batch]);
 
+  // ─── 召唤精灵 ✨ ──────────────────────────────────────────────
+  // 独立路径：直接调一次 dynamic-cloud 接口拉 18 张全 AI 词，**不**消耗蓄水池。
+  // 与"换一批"的区别：
+  //   换一批：本地词混入（漏斗规则比例），蓄水池预取保证零等待
+  //   召唤精灵：完全 AI 生成，需要等 1-3 秒，但保证一屏全是 AI 推的"惊喜词"
+  // 滑动窗口（excludeTexts）共享 —— 已展示过的词仍要避开。
+  // 调用方负责管理 loading 状态（按钮转圈）。
+  const summonFairy = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
+    const newStage = calcStage(selectedTags.filter(t => t.path === currentPath).length);
+    // 把当前 batch + 已选词加进 excludeTexts，避免重复（沿用 refreshBatch 的滑动窗口逻辑）
+    const EXCL_WINDOW = CONFIG.excludeWindow;
+    const selectedSet = new Set(selectedTags.map(t => t.text));
+    const recentExcl = [...batch.map(t => t.text), ...excludeTexts]
+      .filter(t => !selectedSet.has(t));
+    const seen = new Set<string>();
+    const dedupedRecent: string[] = [];
+    for (const t of recentExcl) {
+      if (!seen.has(t)) { seen.add(t); dedupedRecent.push(t); }
+      if (dedupedRecent.length >= EXCL_WINDOW) break;
+    }
+    const allExcl = [...selectedTags.map(t => t.text), ...dedupedRecent];
+
+    try {
+      const res = await fetchDynamicCloud(
+        currentPath, newStage, selectedTags,
+        { excludeTexts: allExcl, count: CONFIG.ui.cardsPerBatch, signal },
+      );
+      // ⚠️ resolve 之后再检查 signal：如果调用方在请求完成后 abort（重选 / 切路径），
+      // 不要把过期数据写回 batch。
+      if (signal?.aborted) return false;
+      const aiTags = (res.tags ?? []).filter(t => t.text);
+      if (aiTags.length === 0) return false;
+
+      // 全部入 batch（不混本地词）
+      setBatch(shuffleTags(aiTags).slice(0, CONFIG.ui.cardsPerBatch));
+      setExcludeTexts(allExcl);
+      setAnalysis(res.analysis ?? mockAnalysis(currentPath, selectedTags, newStage));
+      setEscape(false);
+      return true;
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return false;
+      console.warn('[muse] summonFairy failed', err);
+      return false;
+    }
+  }, [currentPath, selectedTags, batch, excludeTexts]);
+
   // ─── 切路径 ─────────────────────────────────────────────────────
   // Fairy 主壳的 switchPath 会先 setCurrentPath(newPath)，然后调这个清理词云。
   // 这里同步 batch / analysis 到新 path，并 reset escape。
@@ -214,6 +260,7 @@ export function useTagCloud(args: {
     setSelected, setBatch, setExcludeTexts, setEscape, setAnalysis,
     // callbacks
     toggleTag, removeSelected, addSelectedFromInput, refreshBatch,
+    summonFairy,
     resetCloudForPath, resetCloudAfterGenerate,
   };
 }

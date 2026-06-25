@@ -155,7 +155,7 @@ async def call_ai(
     user_prompt: str,
     *,
     temperature: float = 0.8,
-    timeout: float = 60.0,
+    timeout: float = 120.0,
 ) -> str:
     """Call the primary AI gateway, then fallback gateway if configured."""
     primary = _AIEndpoint(

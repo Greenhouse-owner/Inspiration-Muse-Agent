@@ -41,6 +41,13 @@ from app.schemas.result import (
 )
 from app.services.ai_provider import AIError, call_ai
 from app.services.json_utils import extract_json
+from app.services.recipe_utils import (
+    CHARACTER_FIELDS,
+    STORY_FIELDS,
+    WORLDVIEW_FIELDS,
+    coerce_recipe,
+    coerce_swaps,
+)
 
 log = logging.getLogger(__name__)
 
@@ -247,11 +254,24 @@ def _smart_user_prompt(req: RefineSmartRequest) -> str:
         ],
         ensure_ascii=False,
     )
+    swap_instructions_json = json.dumps(
+        [s.model_dump() for s in req.swapInstructions],
+        ensure_ascii=False,
+    )
+    recipe_json = (
+        json.dumps(req.currentRecipe.model_dump(), ensure_ascii=False)
+        if req.currentRecipe is not None
+        else "null"
+    )
+    exclude_json = json.dumps(req.excludeSwapTexts, ensure_ascii=False)
     return REFINE_SMART_USER_TEMPLATE.format(
-        instruction=req.instruction,
+        instruction=req.instruction or "（无）",
+        swap_instructions_json=swap_instructions_json,
         story=req.story.content,
         chapters_json=chapters_json,
         selected_tags_json=tags_json,
+        recipe_json=recipe_json,
+        exclude_swap_texts_json=exclude_json,
     )
 
 
@@ -348,8 +368,22 @@ async def refine_smart(
         note_raw = data.get("note")
         note = str(note_raw).strip() if isinstance(note_raw, str) else None
 
+        # 新 recipe / swaps（顶层字段；StoryResult 内也挂一份，让前端不管从哪取都有）
+        new_recipe = coerce_recipe(data.get("recipe"), allowed_fields=STORY_FIELDS)
+        new_swaps = coerce_swaps(data.get("swaps"), new_recipe)
+        if story is not None and (new_recipe is not None or new_swaps is not None):
+            story = story.model_copy(update={
+                "recipe": new_recipe,
+                "swaps": new_swaps,
+            })
+
         return RefineSmartResponse(
-            targets=targets, story=story, chapters=chapters, note=note,
+            targets=targets,
+            story=story,
+            chapters=chapters,
+            note=note,
+            recipe=new_recipe,
+            swaps=new_swaps,
         )
     except (AIError, ValueError) as e:
         log.warning("refine_smart: AI failed (%s); falling back to mock", e)

@@ -28,6 +28,17 @@ export const CONFIG = {
     max: 20,                          // 章节数上限（前后端 schema 也对齐）
   },
   excludeWindow: 90,                  // 词云黑名单滑动窗口大小（5 批 × 18 卡）
+  swapCards: {
+    perSlot: 3,                       // 每个槽位的词卡数
+    slots: 3,                         // 一次生成几个槽位（不变）
+    refreshDebounceMs: 200,           // 🔄 换一批的连点防抖
+    excludeWindow: 60,                // 调味词卡的滑动窗口（独立于撒网）
+  },
+  hoverPreview: {
+    enterDelayMs: 80,                 // hover 词卡多少毫秒后显示预览
+    leaveDelayMs: 100,                // 离开词卡多少毫秒后隐藏预览
+    maxLen: 60,                       // 防御性截断（与后端 SwapCard.preview 上限一致）
+  },
 } as const;
 
 export type Config = typeof CONFIG;

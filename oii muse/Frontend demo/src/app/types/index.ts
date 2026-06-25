@@ -14,10 +14,41 @@ export interface DynamicTagAnalysis {
   reason?: string;
 }
 
+// ─── 调味词卡（Recipe / Swap） ────────────────────────────────────────────────
+// 与后端 schemas/result.py、schemas/chat.py 严格对齐。
+// 所有字段在结果类型上是可选的：旧后端 / mock 降级路径不返回 recipe/swaps 时，
+// UI 完全维持现状（调味区不渲染）。
+
+export interface SwapCard {
+  label: string;
+  preview: string;
+}
+
+export interface RecipeSlot {
+  field: string;   // 后端字段名，例如 "character" / "wound" / "coreRule"
+  value: string;   // 当前简短代号（用于配方栏显示）
+}
+
+export interface Recipe {
+  slots: RecipeSlot[];   // 恰好 3 个
+}
+
+export interface SwapBatch {
+  // key 与 Recipe.slots[i].field 一一对应；每槽 3 张
+  cards: Record<string, SwapCard[]>;
+}
+
+export interface SwapInstruction {
+  field: string;
+  label: string;
+}
+
 // ─── 三路径生成结果 ───────────────────────────────────────────────────────────
 
 export interface StoryResult {
   content: string;
+  recipe?: Recipe;
+  swaps?: SwapBatch;
 }
 
 export interface CharacterResult {
@@ -29,6 +60,8 @@ export interface CharacterResult {
   fear: string;
   secret: string;
   arc: string;
+  recipe?: Recipe;
+  swaps?: SwapBatch;
 }
 
 export interface WorldviewResult {
@@ -38,6 +71,8 @@ export interface WorldviewResult {
   taboo: string;
   socialImpact: string;
   conflictHooks: string[];
+  recipe?: Recipe;
+  swaps?: SwapBatch;
 }
 
 export type ResultType = 'story' | 'character' | 'worldview';
@@ -138,7 +173,7 @@ export interface InsertStoryChapterResponse {
   degradeReason?: string;
 }
 
-// ─── Smart refine（故事 + 章节）────────────────────────────────────────────
+// ─── Smart refine（故事 + 章节 + 调味词卡）────────────────────────────────
 
 export type SmartTarget = 'story' | 'chapters';
 
@@ -147,6 +182,11 @@ export interface RefineSmartRequest {
   instruction: string;
   story: StoryResult;
   chapters?: StoryChapter[];
+  // 新增（v1.2 调味词卡）。全部可选，旧调用方不传时与原行为一致。
+  path?: CreationPath;
+  currentRecipe?: Recipe;
+  swapInstructions?: SwapInstruction[];
+  excludeSwapTexts?: string[];
 }
 
 export interface RefineSmartResponse {
@@ -154,4 +194,20 @@ export interface RefineSmartResponse {
   story?: StoryResult | null;
   chapters?: StoryChapter[] | null;
   note?: string | null;
+  // 新增：新一轮的 recipe / swaps
+  recipe?: Recipe | null;
+  swaps?: SwapBatch | null;
+}
+
+export interface RefreshSwapsRequest {
+  path: CreationPath;
+  outline: string;
+  recipe: Recipe;
+  excludeSwapTexts?: string[];
+}
+
+export interface RefreshSwapsResponse {
+  swaps?: SwapBatch | null;
+  degraded?: boolean;
+  degradeReason?: string;
 }

@@ -179,3 +179,42 @@
 .muse-dot-1 { animation: museTypingDot 1.1s ease-in-out infinite 0s; }
 .muse-dot-2 { animation: museTypingDot 1.1s ease-in-out infinite .18s; }
 .muse-dot-3 { animation: museTypingDot 1.1s ease-in-out infinite .36s; }
+
+/* ─── Swap v1.2 微动画 ─────────────────────────────────── */
+
+/* HoverPreview 灰字淡入。淡出由 HoverPreview 自己控制透明度过渡 */
+@keyframes museHoverPreviewIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.muse-hover-preview-active {
+  animation: museHoverPreviewIn .12s ease-out forwards;
+}
+
+/* 调味词卡入场。SwapCloud 内部按 row 一齐淡入。 */
+@keyframes museSwapCardIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.muse-swap-card-in { animation: museSwapCardIn .18s ease-out forwards; }
+
+/* 配方栏 chip 替换闪烁：粉色 -> 灰色，0.55s */
+@keyframes museRecipeChipFlash {
+  0%   { background: rgba(255,45,120,.30); border-color: rgba(255,45,120,.85); color: #FFB3D0; }
+  60%  { background: rgba(255,45,120,.10); border-color: rgba(255,45,120,.40); color: #FFB3D0; }
+  100% { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.10); color: inherit; }
+}
+.muse-recipe-chip-flash {
+  animation: museRecipeChipFlash .55s ease-out forwards;
+}
+
+/* loading 旋转 —— 给任意 SVG icon 加这个 class 即可 */
+@keyframes museSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.muse-spin {
+  display: inline-flex;
+  animation: museSpin 0.9s linear infinite;
+}
+

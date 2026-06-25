@@ -5,12 +5,16 @@ import type {
   CreationPath,
   Tag,
   CurrentResult,
+  Recipe,
   RefineRequest,
   RefineResponse,
   RefineSmartRequest,
   RefineSmartResponse,
+  RefreshSwapsRequest,
+  RefreshSwapsResponse,
   StoryResult,
   StoryChapter,
+  SwapInstruction,
 } from '../types';
 
 export async function refineResult(
@@ -33,6 +37,13 @@ export async function refineSmart(
   story: StoryResult,
   chapters: StoryChapter[] | undefined,
   signal?: AbortSignal,
+  // v1.2 新增：调味相关。旧调用方不传时与原行为一致。
+  swapArgs?: {
+    path?: CreationPath;
+    currentRecipe?: Recipe;
+    swapInstructions?: SwapInstruction[];
+    excludeSwapTexts?: string[];
+  },
 ): Promise<RefineSmartResponse> {
   return apiPost<RefineSmartRequest, RefineSmartResponse>(
     '/result/refine-smart',
@@ -41,8 +52,33 @@ export async function refineSmart(
       instruction,
       story,
       chapters: chapters && chapters.length > 0 ? chapters : undefined,
+      ...(swapArgs?.path ? { path: swapArgs.path } : {}),
+      ...(swapArgs?.currentRecipe ? { currentRecipe: swapArgs.currentRecipe } : {}),
+      ...(swapArgs?.swapInstructions ? { swapInstructions: swapArgs.swapInstructions } : {}),
+      ...(swapArgs?.excludeSwapTexts ? { excludeSwapTexts: swapArgs.excludeSwapTexts } : {}),
     },
     { timeoutMs: 90_000, signal },
+  );
+}
+
+export async function refreshSwaps(
+  path: CreationPath,
+  outline: string,
+  recipe: Recipe,
+  excludeSwapTexts: string[] | undefined,
+  signal?: AbortSignal,
+): Promise<RefreshSwapsResponse> {
+  return apiPost<RefreshSwapsRequest, RefreshSwapsResponse>(
+    '/result/refresh-swaps',
+    {
+      path,
+      outline,
+      recipe,
+      ...(excludeSwapTexts && excludeSwapTexts.length > 0
+        ? { excludeSwapTexts }
+        : {}),
+    },
+    { timeoutMs: 20_000, signal },
   );
 }
 
