@@ -257,6 +257,9 @@ export function Fairy() {
     resetCloudForPath(currentPath);
     invalidateCache();
     swapExcludeRef.current = [];
+    // 重选 = 回到首次未选方向的起点：清 pathConfirmed + 折叠词卡区，重新引导
+    setPathConfirmed(false);
+    setCloudCollapsed(true);
   }, [
     isThinking, setCurrentResult, resetChapters, clearPending,
     resetCloudForPath, currentPath, invalidateCache,
@@ -655,9 +658,13 @@ export function Fairy() {
             </TabbedHead>
           </div>
 
-          {/* 选题期欢迎引导 + StageHint —— pathConfirmed=false 时独立渲染 */}
+          {/* 欢迎引导卡 —— 只在用户尚未确认过方向时显示（首次进入 / 重选后）。
+              主动折叠不显示，避免老用户被反复"欢迎"。*/}
           {!pathConfirmed && <WelcomeGuide />}
-          {!pathConfirmed && (
+
+          {/* 选题期 StageHint —— 只要词卡区折叠（未展开）就显示。
+              视觉上"主动折叠"和"首次未选"统一为选题期。*/}
+          {!cloudExpanded && (
             <div style={{ padding: '0 14px 0', flexShrink: 0 }}>
               <StageHint
                 stage={stage}
