@@ -663,9 +663,13 @@ export function Fairy() {
           {!pathConfirmed && <WelcomeGuide />}
 
           {/* 选题期 StageHint —— 只要词卡区折叠（未展开）就显示。
-              视觉上"主动折叠"和"首次未选"统一为选题期。*/}
+              视觉上"主动折叠"和"首次未选"统一为选题期。
+              两种模式上方元素不同（WelcomeGuide / 折叠条），都给一点呼吸 padding。*/}
           {!cloudExpanded && (
-            <div style={{ padding: '0 14px 0', flexShrink: 0 }}>
+            <div style={{
+              padding: pathConfirmed ? '14px 14px 4px' : '4px 14px 0',
+              flexShrink: 0,
+            }}>
               <StageHint
                 stage={stage}
                 analysis={null}
