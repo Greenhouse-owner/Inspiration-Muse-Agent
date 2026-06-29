@@ -29,6 +29,10 @@ export const T = {
     titleEscape: '临时提高自由词比例，打破当前套路',
     titleSummon: '让 AI 拍一屏全新词卡（约 1-3 秒）',
 
+    // 选题期欢迎引导
+    welcomeGreeting: '欢迎来到 oii muse',
+    welcomeHeadline: '点击一个方向，开始你的灵感拼图……',
+
     inputPlaceholderThinking: '正在生成…',
     inputPlaceholderRefineWithChapters: '输入修改需求，或换个数字重生章节…',
     inputPlaceholderStoryNoChapters: '输入数字 1-20 拆章节，或修改需求…',

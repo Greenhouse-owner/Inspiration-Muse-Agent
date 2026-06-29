@@ -17,13 +17,41 @@ export function StageHint({
   isDegraded = false,
   swapMode = false,
   swapPreview = null,
+  selectMode = false,
 }: {
   stage: FunnelStage;
   analysis: DynamicTagAnalysis | null;
   isDegraded?: boolean;
   swapMode?: boolean;
   swapPreview?: string | null;
+  /**
+   * 选题期：用户还没确认创作方向（pathConfirmed=false）时，用灰色提示"先选一个创作方向"。
+   * 优先级最高，覆盖 swapMode / 撒网期。
+   */
+  selectMode?: boolean;
 }) {
+  // 选题期：用户还没选方向。灰色 + 引导文案
+  if (selectMode) {
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: C.sub, display: 'inline-block', flexShrink: 0,
+          }}/>
+          <span style={{ color: C.sub, fontSize: 11, fontWeight: 700 }}>选题期</span>
+          <span style={{
+            // 副标题暗一档，跟 WelcomeGuide 引导语保持同色阶
+            color: 'rgba(255,255,255,.35)', fontSize: 11, marginLeft: -2,
+            flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+          }}>
+            · 先选一个创作方向
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // 调味期：用薄荷绿圆点 + 调味期标签 + 动态副标题
   if (swapMode) {
     const subText = swapPreview && swapPreview.trim() ? swapPreview : '点一张换味道';

@@ -23,13 +23,19 @@ const TAB_GEO = {
 };
 
 export function TabbedHead({
-  current, onChange, disabled, width, children,
+  current, onChange, disabled, width, children, dimmed = false,
 }: {
   current: CreationPath;
   onChange: (p: CreationPath) => void;
   disabled?: boolean;
   width: number;
   children: React.ReactNode;
+  /**
+   * dimmed: 3 个 tab 全部以"未选中"样式渲染（视觉上无选中态），
+   * 用于首次打开 + 折叠时让用户明确选方向。
+   * 内部仍接受 current（路径默认值），只是视觉降级。
+   */
+  dimmed?: boolean;
 }) {
   const { height: H, fillet: F, bumpH, cardR, gap, stroke, idleGapBelow } = TAB_GEO;
   const tabW = (width - gap * 2) / 3;
@@ -66,7 +72,8 @@ export function TabbedHead({
       }}>
         {PATHS.map((p) => {
           const meta = PATH_META[p];
-          const active = p === current;
+          // dimmed=true 时所有 tab 视觉降级（全部按未选中态画），用户必须主动点 tab
+          const active = !dimmed && p === current;
           const Icon = meta.Icon;
           return (
             <button
@@ -108,19 +115,23 @@ export function TabbedHead({
         })}
       </div>
 
-      {/* Card body with custom top edge that bridges into the active tab */}
-      <CardWithTabBridge
-        width={width}
-        activeIdx={activeIdx}
-        tabW={tabW}
-        gap={gap}
-        cardR={cardR}
-        fillet={F}
-        bumpH={bumpH}
-        stroke={stroke}
-      >
-        {children}
-      </CardWithTabBridge>
+      {/* Card body with custom top edge that bridges into the active tab.
+          dimmed 时不渲染下方连接 + 卡片（视觉上 3 个 tab 独立浮着，等待用户选择）。
+          children 仍交由 Fairy.tsx 决定渲不渲染（折叠/展开） */}
+      {!dimmed && (
+        <CardWithTabBridge
+          width={width}
+          activeIdx={activeIdx}
+          tabW={tabW}
+          gap={gap}
+          cardR={cardR}
+          fillet={F}
+          bumpH={bumpH}
+          stroke={stroke}
+        >
+          {children}
+        </CardWithTabBridge>
+      )}
     </div>
   );
 }

@@ -38,12 +38,14 @@ import { ChapterListCard } from "../features/fairy/components/ChapterListCard";
 import { TabbedHead } from "../features/fairy/components/TabbedHead";
 import { CopyButton } from "../features/fairy/components/CopyButton";
 import { SwapCloud } from "../features/fairy/components/SwapCloud";
+import { WelcomeGuide } from "../features/fairy/components/WelcomeGuide";
 import { type ChipTag } from "../features/fairy/components/ChipAwareInput";
 import { useTagCloud } from "../features/fairy/hooks/useTagCloud";
 import { useAiCachePrefetch } from "../features/fairy/hooks/useAiCachePrefetch";
 import { useChapters } from "../features/fairy/hooks/useChapters";
 import { useGeneration } from "../features/fairy/hooks/useGeneration";
 import { useRecipe } from "../features/fairy/hooks/useRecipe";
+import { usePetDrag } from "../features/fairy/hooks/usePetDrag";
 
 // ─── Main Fairy component ─────────────────────────────────────────────────────
 
@@ -53,6 +55,12 @@ export function Fairy() {
   const [museState, setMuseState] = useState<MuseState>('idle');
 
   const [currentPath, setCurrentPath] = useState<CreationPath>('story');
+  // pathConfirmed=false：首次进入或折叠状态。视觉上 3 个 tab 全灰，词卡区折叠。
+  // 内部 currentPath 仍是 'story' 默认值，避免下游 30+ 处引用变成 nullable。
+  const [pathConfirmed, setPathConfirmed] = useState(false);
+  // cloudCollapsed：用户再次点击当前选中的 tab → 折叠词卡区。
+  // 切到新路径 → 自动展开。pathConfirmed=false 时也强制等同折叠。
+  const [cloudCollapsed, setCloudCollapsed] = useState(true);
 
   // ── 词云 / 选词 / 滑动窗口（C3 抽出）─────────────────────────────
   const cloud = useTagCloud({ open, currentPath });
@@ -187,7 +195,9 @@ export function Fairy() {
   // Derived state
   const hasGeneratedResult = currentResult !== null;
   const isThinking  = museState === 'thinking';
-  const canGenerate = selectedTags.length >= CONFIG.generation.minTagsToGenerate && !isThinking;
+  // 词卡区是否展开：必须确认了方向且没被折叠
+  const cloudExpanded = pathConfirmed && !cloudCollapsed;
+  const canGenerate = selectedTags.length >= CONFIG.generation.minTagsToGenerate && !isThinking && pathConfirmed;
 
   // ── Swap 真接口 ──────────────────────────────────────────────────────────
   // 故事路径：走 refine-smart（含 swapInstructions），LLM 一次返回新故事 + 新 recipe + 新 swaps
@@ -307,6 +317,15 @@ export function Fairy() {
     }
   }, [open, spawnStars]);
 
+  // ── 桌宠拖拽 + 面板锚点 + 双击恢复 ────────────────────────────────────
+  // 拖拽距离 > 5px 才视为拖拽（吞掉 click），否则当作点击打开 / 关闭面板。
+  // 面板锚点根据精灵在视口的象限自动翻转（避免画到屏幕外）。
+  // 双击精灵 → 清 localStorage + 归位到右下角默认位置。
+  const petDrag = usePetDrag({
+    expanded: open,
+    onClick: handlePetClick,
+  });
+
   // ── Switch path ────────────────────────────────────────────────────────────
   const switchPath = useCallback((newPath: CreationPath) => {
     if (isThinking) return;
@@ -322,6 +341,39 @@ export function Fairy() {
     // 调味词卡的滑动窗口跟随路径走，切路径要清空避免把旧路径的词喂给新路径的 AI exclude
     swapExcludeRef.current = [];
   }, [isThinking, resetCloudForPath, invalidateCache, setCurrentResult, resetChapters]);
+
+  // ── Tab 点击分流（折叠 + 首次确认逻辑）─────────────────────────────────
+  // 三种情况：
+  //  A. 首次未确认方向（pathConfirmed=false）→ 确认 + 展开（不动 result/章节）
+  //  B. 已确认 + 点击当前 tab → 切换折叠状态
+  //  C. 已确认 + 点击其他 tab → 走 switchPath（清 result）+ 展开
+  const handleTabClick = useCallback((p: CreationPath) => {
+    if (isThinking) return;
+    if (!pathConfirmed) {
+      // A：首次确认。currentPath 内部默认是 'story'，这里要按用户点的设
+      setCurrentPath(p);
+      setPathConfirmed(true);
+      setCloudCollapsed(false);
+      // 如果用户点的不是默认 'story'，词云要切到正确路径（避免显示故事路径词）
+      if (p !== currentPath) {
+        resetCloudForPath(p);
+        invalidateCache();
+      }
+      return;
+    }
+    if (p === currentPath) {
+      // B：再点当前 tab，切折叠状态
+      setCloudCollapsed(prev => !prev);
+      return;
+    }
+    // C：切到其他 tab → 原有 switchPath 行为 + 展开
+    switchPath(p);
+    setCloudCollapsed(false);
+  }, [
+    isThinking, pathConfirmed, currentPath,
+    switchPath, resetCloudForPath, invalidateCache,
+  ]);
+
 
   // ── Add custom tag ─────────────────────────────────────────────────────────
   const addCustomTag = useCallback(() => {
@@ -439,7 +491,12 @@ export function Fairy() {
         <div
           className={`muse-panel-${panelAnim ?? 'enter'}`}
           style={{
-            position: 'fixed', bottom: 108, right: 28,
+            position: 'fixed',
+            // 面板位置跟随桌宠：4 象限自动翻转（usePetDrag.panelAnchor）
+            left:   petDrag.panelAnchor.left,
+            top:    petDrag.panelAnchor.top,
+            right:  petDrag.panelAnchor.right,
+            bottom: petDrag.panelAnchor.bottom,
             width: 352, maxHeight: '84vh',
             background: C.card,
             border: `1px solid ${C.border}`,
@@ -541,9 +598,10 @@ export function Fairy() {
           <div style={{ padding: '10px 12px 0', flexShrink: 0 }}>
             <TabbedHead
               current={currentPath}
-              onChange={switchPath}
+              onChange={handleTabClick}
               disabled={isThinking}
               width={352 - 24}
+              dimmed={!cloudExpanded}
             >
               <StageHint
                 stage={stage}
@@ -597,7 +655,54 @@ export function Fairy() {
             </TabbedHead>
           </div>
 
-          {/* Controls (moved outside card) */}
+          {/* 选题期欢迎引导 + StageHint —— pathConfirmed=false 时独立渲染 */}
+          {!pathConfirmed && <WelcomeGuide />}
+          {!pathConfirmed && (
+            <div style={{ padding: '0 14px 0', flexShrink: 0 }}>
+              <StageHint
+                stage={stage}
+                analysis={null}
+                isDegraded={false}
+                selectMode={true}
+              />
+            </div>
+          )}
+
+          {/* 折叠条 —— 用户主动折叠后显示（首次未确认方向不显示，那时 dimmed tab 已引导）*/}
+          {pathConfirmed && cloudCollapsed && (
+            <div
+              onClick={() => setCloudCollapsed(false)}
+              role="button"
+              title="展开词卡"
+              style={{
+                margin: '6px 12px 0',
+                padding: '6px 0',
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+                background: 'rgba(255,255,255,.03)',
+                color: C.sub,
+                fontSize: 11,
+                textAlign: 'center',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'all .15s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.color = C.p;
+                (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,45,120,.4)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.color = C.sub;
+                (e.currentTarget as HTMLDivElement).style.borderColor = C.border;
+              }}
+            >
+              展开词卡
+            </div>
+          )}
+
+          {/* Controls (moved outside card) —— 折叠时整块隐藏（召唤精灵/换一批跟词卡区一起收起）*/}
+          {cloudExpanded && (
           <div style={{
             padding: '8px 14px 4px',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -693,6 +798,7 @@ export function Fairy() {
               )}
             </div>
           </div>
+          )}
 
           {/* Messages */}
           {(messages.length > 0 || isThinking) && (() => {
@@ -838,7 +944,7 @@ export function Fairy() {
             {hasGeneratedResult ? (
               <button
                 onClick={sendMessage}
-                disabled={isThinking || (swapReady ? (pendingTags.length === 0 && !pendingText.trim()) : !input.trim())}
+                disabled={!pathConfirmed || isThinking || (swapReady ? (pendingTags.length === 0 && !pendingText.trim()) : !input.trim())}
                 style={{
                   width: 32, height: 32, borderRadius: 8, border: 'none', flexShrink: 0,
                   background: isThinking
@@ -859,14 +965,18 @@ export function Fairy() {
               </button>
             ) : (
               <button
-                onClick={input.trim() ? addCustomTag : canGenerate ? generate : undefined}
+                onClick={pathConfirmed ? (input.trim() ? addCustomTag : canGenerate ? generate : undefined) : undefined}
+                disabled={!pathConfirmed}
+                title={!pathConfirmed ? '请先在上方选一个方向' : ''}
                 style={{
                   height: 32, padding: '0 10px', borderRadius: 8, border: 'none', flexShrink: 0,
-                  background: canGenerate && !input.trim() ? C.p
+                  background: !pathConfirmed ? 'rgba(255,255,255,.06)'
+                    : canGenerate && !input.trim() ? C.p
                     : input.trim() ? 'rgba(255,45,120,.2)' : 'rgba(255,255,255,.06)',
-                  color: canGenerate && !input.trim() ? '#fff'
+                  color: !pathConfirmed ? 'rgba(255,255,255,.25)'
+                    : canGenerate && !input.trim() ? '#fff'
                     : input.trim() ? C.p : C.sub,
-                  cursor: canGenerate || input.trim() ? 'pointer' : 'default',
+                  cursor: !pathConfirmed ? 'not-allowed' : (canGenerate || input.trim() ? 'pointer' : 'default'),
                   fontSize: 11, fontWeight: 700, transition: 'all .15s ease', whiteSpace: 'nowrap',
                 }}
               >
@@ -878,7 +988,21 @@ export function Fairy() {
       )}
 
       {/* ── Pet ──────────────────────────────────────────────────────────────── */}
-      <div className={petClass} onClick={handlePetClick} role="button" aria-label="oiioii Muse">
+      <div
+        className={petClass}
+        role="button"
+        aria-label="oiioii Muse"
+        style={{
+          ...petDrag.petStyle,
+          // 拖拽中暂停 CSS 动画（避免 transform 抖动）+ 改光标
+          ...(petDrag.dragging ? {
+            cursor: 'grabbing',
+            animationPlayState: 'paused',
+          } : {}),
+          touchAction: 'none',  // 移动端阻止滚动冲突
+        }}
+        {...petDrag.handlers}
+      >
         {flash && <div className="muse-pet-flash"/>}
         {stars.map(s => (
           <div key={s.id} className="muse-pet-star" style={{
