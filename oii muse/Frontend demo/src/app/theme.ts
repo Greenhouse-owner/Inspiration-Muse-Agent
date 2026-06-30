@@ -22,8 +22,8 @@ export const theme = {
   // Fairy 折叠 tab + 卡片连体（不可改成 rgba，必须不透明覆盖 1px 描边）
   cardFill:   '#281B20',
   cardBorder: '#FF2D78',
-  tabIdleBd:  '#3A3A3A',
-  tabIdleTxt: '#888888',
+  tabIdleBd:  '#52525B',
+  tabIdleTxt: '#898990',
 
   // Fairy 已选词条 / chip
   chipBg:  'rgba(255,45,120,.18)',

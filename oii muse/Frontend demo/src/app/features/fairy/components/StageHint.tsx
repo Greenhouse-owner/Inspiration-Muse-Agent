@@ -37,9 +37,9 @@ export function StageHint({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
             width: 6, height: 6, borderRadius: '50%',
-            background: C.sub, display: 'inline-block', flexShrink: 0,
+            background: 'rgba(255,255,255,.75)', display: 'inline-block', flexShrink: 0,
           }}/>
-          <span style={{ color: C.sub, fontSize: 11, fontWeight: 700 }}>选题期</span>
+          <span style={{ color: 'rgba(255,255,255,.75)', fontSize: 11, fontWeight: 700 }}>选题期</span>
           <span style={{
             // 副标题暗一档，跟 WelcomeGuide 引导语保持同色阶
             color: 'rgba(255,255,255,.35)', fontSize: 11, marginLeft: -2,

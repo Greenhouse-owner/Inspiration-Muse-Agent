@@ -522,13 +522,20 @@ export function Fairy() {
               background: C.p, boxShadow: `0 0 6px ${C.p}`,
               display: 'inline-block', flexShrink: 0,
             }}/>
-            <span style={{ color: C.p, fontSize: 13, fontWeight: 700, letterSpacing: '.04em' }}>
+            <span style={{
+              color: C.p,
+              fontSize: 13,
+              fontWeight: 900,
+              letterSpacing: '.04em',
+              // 在没有 Inter Black 真实 900 字重时，用描边补粗，让字看起来"再厚一点"
+              WebkitTextStroke: '0.6px currentColor',
+            }}>
               oiioii Muse
             </span>
-            <span style={{ color: C.sub, fontSize: 11 }}>{selectedTags.length}/20</span>
+            <span style={{ color: C.sub, fontSize: 11, marginLeft: 'auto' }}>{selectedTags.length}/20</span>
             {canGenerate && !hasGeneratedResult && (
               <button onClick={generate} style={{
-                marginLeft: 'auto', padding: '3px 11px',
+                padding: '3px 11px',
                 borderRadius: 6, border: `1px solid ${C.p}`,
                 background: C.p, color: '#fff',
                 fontSize: 11, fontWeight: 700, cursor: 'pointer',

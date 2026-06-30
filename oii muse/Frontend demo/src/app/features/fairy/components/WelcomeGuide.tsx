@@ -26,8 +26,8 @@ export function WelcomeGuide() {
       data-testid="welcome-guide"
       style={{
         flexShrink: 0,
-        // 上下都留出与 tab 区 / 选题期 hint 的间距，避免横线撞到旁边的元素
-        margin: '14px 14px 12px',
+        // 抵消 TabbedHead 内部 idleGapBelow=8 的视觉间隔，让 tab 上下间距对称
+        margin: '2px 14px 12px',
       }}
     >
       {divider}
@@ -39,13 +39,16 @@ export function WelcomeGuide() {
         gap: 5,
         // 暗一档，跟 selectMode StageHint 副标题保持同色阶
         color: 'rgba(255,255,255,.35)',
-        fontSize: 12,
+        // 字号 + 字重跟上方 tab 文字（13/600）一致
+        fontSize: 13,
+        fontWeight: 600,
         lineHeight: 1.5,
       }}>
         <span style={{
           display: 'inline-flex',
           flexShrink: 0,
-          color: 'rgba(255,255,255,.35)',
+          // icon 单独提亮一档，让"点击"动作更醒目，文字保持暗一档
+          color: 'rgba(255,255,255,.5)',
         }}>
           <IconTap size={20} strokeWidth={1.8} />
         </span>

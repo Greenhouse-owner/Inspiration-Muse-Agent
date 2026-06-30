@@ -95,13 +95,13 @@ export function TabbedHead({
                 style={{ display: 'block', position: 'absolute', inset: 0, overflow: 'visible' }}
               >
                 {!active && (
-                  <path d={idleTabPath()} fill="transparent" stroke={C.tabIdleBd} strokeWidth={stroke} />
+                  <path d={idleTabPath()} fill="#29292B" stroke={C.tabIdleBd} strokeWidth={stroke} />
                 )}
               </svg>
               <div style={{
                 position: 'absolute', inset: 0,
                 display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 5,
+                alignItems: 'center', justifyContent: 'center', gap: 2,
                 pointerEvents: 'none',
                 // 未选中 tab 的可见胶囊高度比 button 短 idleGapBelow，
                 // 把内容也上移 idleGapBelow/2，让图标+文字在胶囊里居中。
