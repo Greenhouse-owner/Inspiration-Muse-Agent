@@ -36,7 +36,7 @@ export function WelcomeGuide() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: 5,
         // 暗一档，跟 selectMode StageHint 副标题保持同色阶
         color: 'rgba(255,255,255,.35)',
         fontSize: 12,
@@ -47,7 +47,7 @@ export function WelcomeGuide() {
           flexShrink: 0,
           color: 'rgba(255,255,255,.35)',
         }}>
-          <IconTap size={15} />
+          <IconTap size={20} strokeWidth={1.8} />
         </span>
         <span>
           {T.fairy.welcomeHeadline}
