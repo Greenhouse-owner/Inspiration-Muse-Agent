@@ -165,12 +165,12 @@ export const T = {
     heroChips: [
       { icon: '📖', text: '3 条创作路径' },
       { icon: '🔄', text: '动态词卡闭环' },
-      { icon: '🌪', text: '跳出去模式' },
+      { icon: '✨', text: '召唤精灵' },
       { icon: '✦', text: '3 种结构化输出' },
     ],
 
     sectionFeatures: '产品功能',
-    sectionFunnel:   '三阶段漏斗',
+    sectionFunnel:   '五阶段漏斗',
     sectionFlow:     '使用流程',
     sectionTech:     '技术架构',
     sectionStack:    '技术选型',
@@ -178,11 +178,16 @@ export const T = {
     featureCards: [
       { icon: '📖', title: '三条创作路径',  desc: '故事梗概 / 角色设定 / 世界观规则，点击切换，词卡围绕当前创作目标即时重排。' },
       { icon: '🔄', title: '动态生词闭环',  desc: '每次刷新，AI 先读取已选词、分析创作缺口，再生成下一批被"染色"的词卡。' },
-      { icon: '🌪', title: '跳出去模式',    desc: '词卡被锁死时，点「跳出去」临时提高自由词比例，打破套路，避免过早收束。' },
+      { icon: '✨', title: '召唤精灵',      desc: '词卡卡壳时按"召唤精灵"：独立路径调用 AI，瞬间换上一屏 18 张全新绿色词卡，跳出当前思维定式。' },
       { icon: '✦', title: '三种结构化输出', desc: '按当前路径生成：故事梗概文本 / 角色设定卡 / 世界观规则说明，结果可继续修改。' },
     ],
 
     funnelStages: [
+      {
+        icon: '○', label: '选题期', color: '#999999',
+        desc: '首次进入或重选时：3 个方向 tab 全灰，先选一个创作方向再开始。',
+        words: ['故事梗概', '角色设定', '世界观规则'],
+      },
       {
         icon: '◈', label: '撒网期', color: theme.primary,
         desc: '短词、意象词、开放词为主，快速找到故事感觉，不替用户定型。',
@@ -198,13 +203,19 @@ export const T = {
         desc: '剧情钩子、核心秘密、最终选择为主，帮助故事结构成形。',
         words: ['妹妹其实是人格', '记忆是世界的货币', '最后选择说出真相'],
       },
+      {
+        icon: '◐', label: '调味期', color: '#FFCC31',
+        desc: '生成结果后：9 张暖黄词卡精调元素，hover 看预览，点选叠加，一次发送一次重生。',
+        words: ['换主角', '换冲突', '换世界观'],
+      },
     ],
 
     archSteps: [
-      { step: '01', label: '选路径',     desc: '选择本次创作目标：故事 / 角色 / 世界观' },
+      { step: '01', label: '选方向',     desc: '从故事 / 角色 / 世界观中选一个创作方向（不选无法生成）' },
       { step: '02', label: '选词锁定',   desc: '在词云点选，已选词跨路径常驻锁定栏' },
       { step: '03', label: '动态刷新',   desc: 'AI 读取已选词分析缺口，生成下一批词卡' },
       { step: '04', label: '生成输出',   desc: '按当前路径生成结构化结果，可继续修改' },
+      { step: '05', label: '调味替换',   desc: '进入调味期，用 9 张可替换词卡精调每个元素' },
     ],
 
     techCards: [
@@ -220,7 +231,7 @@ export const T = {
       ['后端',    'FastAPI + Python 3.11',            '按创作路径路由到独立词库与 prompt 链路'],
       ['AI 分析', 'Prompt 工程 + Pydantic',           '归纳创作状态、分析缺口、生成结构化词卡'],
       ['存储',    'localStorage（MVP）',              '保存会话、路径历史、锁定词'],
-      ['部署',    'Vercel + Railway',                 '免费额度，自动 CI/CD'],
+      ['部署',    'Cloudflare Pages + Railway',       '免费额度，自动 CI/CD'],
     ],
 
     footerSpan: 'oiioii Muse — MVP 阶段',
