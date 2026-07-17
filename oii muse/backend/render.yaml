@@ -1,0 +1,44 @@
+# Render 部署配置 —— oiioii Muse 后端（FastAPI）
+#
+# 用法：在 Render 控制台 New → Blueprint，指向这个 repo，
+# Render 会自动读取本文件创建 service。
+#
+# 注意：rootDir 指向 backend 子目录（因为仓库根是 monorepo，
+# 后端在 "oii muse/backend/" 下）。
+#
+# 环境变量里的密钥（AI_API_KEY 等）不写在这里，
+# 在 Render 控制台的 Environment 面板手动填（sync: false 的项）。
+
+services:
+  - type: web
+    name: oiioii-muse-api
+    runtime: python
+    plan: free
+    rootDir: "oii muse/backend"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips='*'"
+    healthCheckPath: "/health"
+    envVars:
+      # Python 版本（对齐 runtime.txt）
+      - key: PYTHON_VERSION
+        value: "3.11.10"
+
+      # ── CORS：允许线上前端域名访问（关键！不配线上前端会被拦）──
+      - key: CORS_ORIGINS
+        value: "https://inspiration-muse-agent.pages.dev,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5273,http://127.0.0.1:5273"
+
+      # ── 以下密钥在 Render 控制台手动填，不进 git ──
+      - key: AI_API_BASE_URL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: TAG_AI_API_BASE_URL
+        sync: false
+      - key: TAG_AI_API_KEY
+        sync: false
+      - key: TAG_AI_MODEL
+        sync: false
+      - key: APP_TOKEN
+        sync: false
